@@ -24,6 +24,7 @@ export function LyricsPanel() {
       try {
         const result = await window.electronAPI.lyrics.read(
           currentSong.id,
+          currentSong.path,
           currentSong.lrcPath,
           currentSong.hasEmbeddedLyrics,
         );

@@ -10,6 +10,7 @@ interface PlayerState {
   volume: number;
   isMuted: boolean;
   playbackSpeed: number;
+  isSeeking: boolean;
 
   // Queue
   queue: Song[];
@@ -34,6 +35,7 @@ interface PlayerState {
   setVolume: (volume: number) => void;
   toggleMute: () => void;
   setPlaybackSpeed: (speed: number) => void;
+  setIsSeeking: (isSeeking: boolean) => void;
 
   // Queue actions
   setQueue: (songs: Song[], startIndex?: number) => void;
@@ -72,6 +74,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   volume: 0.8,
   isMuted: false,
   playbackSpeed: 1,
+  isSeeking: false,
 
   queue: [],
   originalQueue: [],
@@ -94,21 +97,49 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
 
   setPlaybackSpeed: (playbackSpeed) => set({ playbackSpeed }),
+  setIsSeeking: (isSeeking) => set({ isSeeking }),
 
   setQueue: (songs, startIndex = 0) => {
+    console.log('SETQUEUE');
+    console.log(songs.length);
+    console.log(startIndex);
+    console.log(songs[startIndex]);
+
+    if (songs.length === 0) {
+      set({
+        queue: [],
+        originalQueue: [],
+        queueIndex: -1,
+        currentSong: null,
+        isPlaying: false,
+      });
+      console.log(get().queue.length);
+      console.log(get().queueIndex);
+      console.log(get().currentSong);
+      return;
+    }
+
     const state = get();
     const originalQueue = [...songs];
+    const safeStartIndex =
+      Number.isInteger(startIndex) && startIndex >= 0 && startIndex < songs.length ? startIndex : 0;
+    if (safeStartIndex !== startIndex) {
+      console.error('[setQueue] Invalid startIndex. Falling back to index 0.', {
+        startIndex,
+        songsLength: songs.length,
+      });
+    }
     let queue: Song[];
     let queueIndex: number;
 
     if (state.shuffleMode === 'on') {
-      const currentSong = songs[startIndex];
-      const rest = songs.filter((_, i) => i !== startIndex);
+      const currentSong = songs[safeStartIndex];
+      const rest = songs.filter((_, i) => i !== safeStartIndex);
       queue = [currentSong, ...shuffleArray(rest)];
       queueIndex = 0;
     } else {
       queue = [...songs];
-      queueIndex = startIndex;
+      queueIndex = safeStartIndex;
     }
 
     set({
@@ -118,6 +149,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentSong: queue[queueIndex] ?? null,
       isPlaying: true,
     });
+    console.log(get().queue.length);
+    console.log(get().queueIndex);
+    console.log(get().currentSong);
   },
 
   addToQueue: (song) =>
@@ -159,6 +193,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return null;
     }
 
+    console.log("NEXT", queueIndex + 1);
+
     const nextSong = queue[nextIndex];
     set({
       queueIndex: nextIndex,
@@ -167,22 +203,53 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isPlaying: true,
       history: state.currentSong ? [...state.history, state.currentSong] : state.history,
     });
+
+    console.log(get().queue.length);
+    console.log(get().queueIndex);
+    console.log(get().currentSong);
+
     return nextSong;
   },
 
   playPrevious: () => {
     const state = get();
-    const { queue, queueIndex, currentTime } = state;
+    const { queue, queueIndex, currentTime, repeatMode } = state;
 
     if (queue.length === 0) return null;
 
     // If more than 3 seconds in, restart current song
     if (currentTime > 3) {
+      console.log("PREVIOUS", queueIndex - 1);
       set({ currentTime: 0 });
+      window.dispatchEvent(new CustomEvent('player:seek', { detail: 0 }));
+      console.log(get().queue.length);
+      console.log(get().queueIndex);
+      console.log(get().currentSong);
       return state.currentSong;
     }
 
-    const prevIndex = queueIndex > 0 ? queueIndex - 1 : queue.length - 1;
+    console.log("PREVIOUS", queueIndex - 1);
+
+    let prevIndex: number;
+    if (queueIndex > 0) {
+      prevIndex = queueIndex - 1;
+    } else {
+      // First song in queue
+      if (repeatMode === 'all') {
+        prevIndex = queue.length - 1;
+      } else if (repeatMode === 'one') {
+        prevIndex = queueIndex;
+      } else {
+        // repeatMode === 'off'
+        set({ currentTime: 0 });
+        window.dispatchEvent(new CustomEvent('player:seek', { detail: 0 }));
+        console.log(get().queue.length);
+        console.log(get().queueIndex);
+        console.log(get().currentSong);
+        return state.currentSong;
+      }
+    }
+
     const prevSong = queue[prevIndex];
 
     set({
@@ -191,6 +258,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTime: 0,
       isPlaying: true,
     });
+
+    console.log(get().queue.length);
+    console.log(get().queueIndex);
+    console.log(get().currentSong);
+
     return prevSong;
   },
 

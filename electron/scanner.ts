@@ -108,7 +108,10 @@ async function readMetadata(filePath: string, cachePath: string): Promise<RawMet
     // Extract embedded lyrics
     let embeddedLyrics: string | null = null;
     if (common.lyrics && common.lyrics.length > 0) {
-      embeddedLyrics = common.lyrics.join('\n');
+      embeddedLyrics = common.lyrics
+        .map((lyr: any) => (typeof lyr === 'string' ? lyr : lyr?.text || ''))
+        .filter((text: string) => text.trim().length > 0)
+        .join('\n');
     }
 
     // Find LRC file
@@ -416,20 +419,60 @@ export function registerScannerIpc(getDataPath: () => string): void {
   });
 
   // Read lyrics
-  ipcMain.handle('lyrics:read', async (_event, songId: string, lrcPath: string | null, hasEmbeddedLyrics: boolean) => {
+  ipcMain.handle('lyrics:read', async (
+    _event,
+    songId: string,
+    audioPath: string,
+    lrcPath: string | null,
+    hasEmbeddedLyrics: boolean,
+  ) => {
     const dataPath = getDataPath();
 
     // Try embedded lyrics from cache first
     if (hasEmbeddedLyrics) {
       const cachedPath = path.join(dataPath, 'cache', 'lyrics', `${songId}.txt`);
       if (fs.existsSync(cachedPath)) {
-        return { source: 'embedded', content: fs.readFileSync(cachedPath, 'utf-8') };
+        const content = fs.readFileSync(cachedPath, 'utf-8');
+        if (content.includes('[object Object]')) {
+          try {
+            fs.unlinkSync(cachedPath);
+            console.log(`[Scanner] Deleted corrupted lyrics cache: ${cachedPath}`);
+          } catch (e) {}
+        } else {
+          return { source: 'embedded', content };
+        }
       }
     }
 
     // Try LRC file second (synced)
     if (lrcPath && fs.existsSync(lrcPath)) {
       return { source: 'lrc', content: fs.readFileSync(lrcPath, 'utf-8') };
+    }
+
+    const derivedLrcPath = lrcPath || findLrcFile(audioPath);
+    if (derivedLrcPath && fs.existsSync(derivedLrcPath)) {
+      return { source: 'lrc', content: fs.readFileSync(derivedLrcPath, 'utf-8') };
+    }
+
+    // Last resort: read embedded lyrics directly from the audio file.
+    if (audioPath && fs.existsSync(audioPath)) {
+      try {
+        const mm = await import('music-metadata');
+        const metadata = await mm.parseFile(audioPath);
+        const lyrics = metadata.common.lyrics;
+        if (lyrics && lyrics.length > 0) {
+          const content = lyrics
+            .map((lyr: any) => (typeof lyr === 'string' ? lyr : lyr?.text || ''))
+            .filter((text: string) => text.trim().length > 0)
+            .join('\n');
+
+          if (content.trim().length > 0) {
+            return { source: 'embedded-file', content };
+          }
+        }
+      } catch (error) {
+        console.error(`[Scanner] Failed reading embedded lyrics from audio file: ${audioPath}`, error);
+      }
     }
 
     return null;

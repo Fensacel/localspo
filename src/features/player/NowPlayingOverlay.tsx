@@ -1,46 +1,57 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePlayerStore, useFavoritesStore } from '@/stores';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Minimize2, Heart, Volume2, ListMusic, Mic2, Play, Pause } from 'lucide-react';
+import {
+  Minimize2,
+  Heart,
+  Volume2,
+  Mic2,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  MoreHorizontal,
+} from 'lucide-react';
 import {
   formatFileSize,
-  formatBitrate,
-  formatSampleRate,
-  formatBitDepth,
 } from '@/utils';
 import { parseLyrics, findCurrentLyricIndex } from '@/services/lyricsParser';
 import type { LyricsData } from '@/types';
-import { QueuePanel } from '@/components/QueuePanel';
 
 export function NowPlayingOverlay() {
   const {
     currentSong,
     isPlaying,
     currentTime,
+    duration,
     volume,
     showNowPlaying,
     setShowNowPlaying,
     setIsPlaying,
+    setVolume,
   } = usePlayerStore();
 
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
 
-  const [activeTab, setActiveTab] = useState<'lyrics' | 'queue'>('lyrics');
   const [visualizerType, setVisualizerType] = useState<
     'spectrum' | 'waveform' | 'circular' | 'particle'
   >('circular');
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [localTime, setLocalTime] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const lyricLineRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const volumeRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   // Load lyrics
   useEffect(() => {
     if (!currentSong) return;
 
     window.electronAPI.lyrics
-      .read(currentSong.id, currentSong.lrcPath, currentSong.hasEmbeddedLyrics)
+      .read(currentSong.id, currentSong.path, currentSong.lrcPath, currentSong.hasEmbeddedLyrics)
       .then((res: { source: string; content: string } | null) => {
         if (res) {
           setLyrics(parseLyrics(res.content));
@@ -63,6 +74,73 @@ export function NowPlayingOverlay() {
       container.scrollTo({ top: scrollTarget, behavior: 'smooth' });
     }
   }, [currentLyricIndex, lyrics?.synced]);
+
+  useEffect(() => {
+    if (!isSeeking) {
+      setLocalTime(currentTime);
+    }
+  }, [currentTime, isSeeking]);
+
+  const handleProgressPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!progressRef.current || !duration) return;
+    setIsSeeking(true);
+
+    const applySeek = (clientX: number) => {
+      if (!progressRef.current) return;
+      const rect = progressRef.current.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const seekTime = percent * duration;
+      setLocalTime(seekTime);
+      window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+    };
+
+    applySeek(e.clientX);
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      applySeek(moveEvent.clientX);
+    };
+
+    const handlePointerUp = () => {
+      setIsSeeking(false);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+  };
+
+  const handleVolumePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!volumeRef.current) return;
+
+    const updateVolumeFromEvent = (clientX: number) => {
+      if (!volumeRef.current) return;
+      const rect = volumeRef.current.getBoundingClientRect();
+      const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      setVolume(percent);
+      window.dispatchEvent(new CustomEvent('player:volume', { detail: percent }));
+    };
+
+    updateVolumeFromEvent(e.clientX);
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      updateVolumeFromEvent(moveEvent.clientX);
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+  };
 
   // Visualizer loop
   useEffect(() => {
@@ -298,7 +376,7 @@ export function NowPlayingOverlay() {
         </div>
 
         {/* Titlebar header inside fullscreen overlay */}
-        <div className="relative z-10 flex items-center justify-between shrink-0 h-12 border-b border-white/5 mb-6">
+        <div className="relative z-10 flex items-center justify-between shrink-0 h-12 mb-6">
           <button
             onClick={() => setShowNowPlaying(false)}
             className="flex items-center gap-2 text-text/50 hover:text-text transition-colors text-sm font-medium"
@@ -306,23 +384,6 @@ export function NowPlayingOverlay() {
             <Minimize2 size={16} />
             Back to Library
           </button>
-          <div className="flex bg-white/5 rounded-xl p-0.5 border border-white/5">
-            {['spectrum', 'waveform', 'circular', 'particle'].map((type) => (
-              <button
-                key={type}
-                onClick={() =>
-                  setVisualizerType(type as 'spectrum' | 'waveform' | 'circular' | 'particle')
-                }
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 ${
-                  visualizerType === type
-                    ? 'bg-primary text-white shadow-glow'
-                    : 'text-text/40 hover:text-text/70'
-                }`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
           <div className="w-24" /> {/* Spacer */}
         </div>
 
@@ -330,43 +391,101 @@ export function NowPlayingOverlay() {
         <div className="relative z-10 flex-1 grid grid-cols-12 gap-8 min-h-0">
           {/* Left panel: Album and Metadata */}
           <div className="col-span-4 flex flex-col justify-center items-center min-w-0">
-            <motion.div
-              animate={{ rotate: isPlaying ? 360 : 0 }}
-              transition={
-                isPlaying ? { repeat: Infinity, duration: 30, ease: 'linear' } : { duration: 0.5 }
-              }
-              className="relative w-72 h-72 xl:w-[360px] xl:h-[360px] rounded-full overflow-hidden shadow-glow-xl border border-white/10 group mb-6 shrink-0"
-            >
-              <img src={coverSrc} alt={currentSong.album} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <button
-                  onClick={() => setIsPlaying(!isPlaying)}
-                  className="w-16 h-16 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-glow hover:scale-105 active:scale-95 transition-all duration-200"
-                >
-                  {isPlaying ? (
-                    <Pause size={24} fill="currentColor" />
-                  ) : (
-                    <Play size={24} fill="currentColor" className="ml-1" />
-                  )}
-                </button>
+            <div className="relative w-72 h-72 xl:w-[360px] xl:h-[360px] mb-6 shrink-0">
+              <div className="w-full h-full rounded-3xl overflow-hidden shadow-glow-xl border border-white/10">
+                <img src={coverSrc} alt={currentSong.album} className="w-full h-full object-cover" />
               </div>
-            </motion.div>
-
-            <div className="text-center w-full max-w-sm px-4">
-              <h2 className="text-2xl font-bold truncate text-glow-blue">{currentSong.title}</h2>
-              <p className="text-text/50 text-sm truncate mt-1">{currentSong.artist}</p>
-              <p className="text-text/30 text-xs truncate mt-0.5">{currentSong.album}</p>
             </div>
 
-            <div className="flex gap-4 mt-6">
+            <div className="flex items-center justify-center gap-3 mb-5">
               <button
-                onClick={() => toggleFavoriteSong(currentSong.id)}
-                className={`p-3 rounded-full glass hover:scale-105 active:scale-95 transition-all ${
-                  isFav ? 'text-primary' : 'text-text/30 hover:text-text/60'
-                }`}
+                onClick={() => usePlayerStore.getState().playPrevious()}
+                className="w-11 h-11 rounded-full bg-white/5 border border-white/10 text-text/80 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
               >
-                <Heart size={20} fill={isFav ? 'currentColor' : 'none'} />
+                <SkipBack size={18} fill="currentColor" />
               </button>
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center shadow-glow hover:scale-105 active:scale-95 transition-all duration-200"
+              >
+                {isPlaying ? (
+                  <Pause size={24} fill="currentColor" />
+                ) : (
+                  <Play size={24} fill="currentColor" className="ml-1" />
+                )}
+              </button>
+              <button
+                onClick={() => usePlayerStore.getState().playNext()}
+                className="w-11 h-11 rounded-full bg-white/5 border border-white/10 text-text/80 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
+              >
+                <SkipForward size={18} fill="currentColor" />
+              </button>
+            </div>
+
+            <div className="group w-full max-w-sm px-4 mb-4">
+              <div
+                ref={progressRef}
+                onPointerDown={handleProgressPointerDown}
+                className="relative h-1.5 rounded-full bg-white/10 cursor-pointer"
+              >
+                <div
+                  className="absolute left-0 top-0 h-full rounded-full bg-primary"
+                  style={{ width: `${duration > 0 ? (localTime / duration) * 100 : 0}%` }}
+                />
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary shadow-glow"
+                  style={{ left: `calc(${duration > 0 ? (localTime / duration) * 100 : 0}% - 6px)` }}
+                />
+              </div>
+            </div>
+
+            <div className="w-full max-w-sm px-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-2xl font-bold truncate text-glow-blue">{currentSong.title}</h2>
+                  <p className="text-text/50 text-sm truncate mt-1">{currentSong.artist}</p>
+                  <p className="text-text/30 text-xs truncate mt-0.5">{currentSong.album}</p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 pt-1">
+                  <button
+                    onClick={() => toggleFavoriteSong(currentSong.id)}
+                    className={`w-10 h-10 rounded-full border transition-all flex items-center justify-center hover:scale-105 active:scale-95 ${
+                      isFav
+                        ? 'bg-primary/90 border-white/10 text-white'
+                        : 'bg-white/5 border-white/10 text-text/70 hover:text-white hover:bg-white/10'
+                    }`}
+                    aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    <Heart size={16} fill={isFav ? 'currentColor' : 'none'} />
+                  </button>
+
+                  <button
+                    className="w-10 h-10 rounded-full bg-white/5 border border-white/10 text-text/70 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center hover:scale-105 active:scale-95"
+                    aria-label="More options"
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="group mt-8 flex items-center gap-3 w-full max-w-sm px-4">
+              <Volume2 size={14} className="text-text/50 shrink-0" />
+              <div
+                ref={volumeRef}
+                onPointerDown={handleVolumePointerDown}
+                className="relative flex-1 h-1 bg-white/10 rounded-full cursor-pointer"
+              >
+                <div
+                  className="absolute left-0 top-0 h-full bg-primary rounded-full"
+                  style={{ width: `${volume * 100}%` }}
+                />
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-glow"
+                  style={{ left: `calc(${volume * 100}% - 6px)` }}
+                />
+              </div>
             </div>
           </div>
 
@@ -375,140 +494,76 @@ export function NowPlayingOverlay() {
             <canvas ref={canvasRef} className="w-full h-full object-contain pointer-events-none" />
           </div>
 
-          {/* Right panel: Tabbed lyrics / queue */}
-          <div className="col-span-4 flex flex-col min-h-0 bg-white/[0.02] border border-white/5 rounded-3xl p-5">
-            {/* Tabs header */}
-            <div className="flex border-b border-white/5 pb-3 mb-4 shrink-0">
-              <button
-                onClick={() => setActiveTab('lyrics')}
-                className={`flex-1 pb-2 text-center text-sm font-bold border-b-2 transition-all ${
-                  activeTab === 'lyrics'
-                    ? 'border-primary text-text'
-                    : 'border-transparent text-text/40 hover:text-text/70'
-                }`}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <Mic2 size={14} /> Lyrics
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('queue')}
-                className={`flex-1 pb-2 text-center text-sm font-bold border-b-2 transition-all ${
-                  activeTab === 'queue'
-                    ? 'border-primary text-text'
-                    : 'border-transparent text-text/40 hover:text-text/70'
-                }`}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <ListMusic size={14} /> Queue
-                </span>
-              </button>
-            </div>
-
-            {/* Tab content */}
-            <div className="flex-1 overflow-hidden min-h-0">
-              {activeTab === 'lyrics' ? (
-                <div
-                  ref={lyricsContainerRef}
-                  className="w-full h-full overflow-y-auto px-2 relative py-8"
-                >
-                  {lyrics ? (
-                    lyrics.synced ? (
-                      <div className="space-y-4 py-24">
-                        {lyrics.lines.map((line, idx) => {
-                          const isActive = idx === currentLyricIndex;
-                          const isPast = currentLyricIndex >= 0 && idx < currentLyricIndex;
-                          return (
-                            <div
-                              key={idx}
-                              ref={(el) => {
-                                if (el) lyricLineRefs.current.set(idx, el);
-                              }}
-                              onClick={() => {
-                                window.dispatchEvent(
-                                  new CustomEvent('player:seek', { detail: line.time }),
-                                );
-                              }}
-                              className="cursor-pointer"
-                            >
-                              <motion.p
-                                animate={{
-                                  fontSize: isActive ? '28px' : '18px',
-                                  fontWeight: isActive ? 700 : 600,
-                                  opacity: isActive ? 1 : isPast ? 0.35 : 0.45,
-                                  color: isActive ? '#3B82F6' : '#94A3B8',
-                                }}
-                                transition={{ duration: 0.25 }}
-                                className={`leading-relaxed text-center ${
-                                  isActive ? 'text-glow-blue font-bold' : ''
-                                }`}
-                              >
-                                {line.text}
-                              </motion.p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="space-y-4 text-center py-4">
-                        {lyrics.lines.map((line, idx) => (
-                          <p key={idx} className="text-sm text-text/60 leading-relaxed">
+          {/* Right panel: Full lyrics */}
+          <div className="col-span-4 flex flex-col min-h-0">
+            <div
+              ref={lyricsContainerRef}
+              className="flex-1 overflow-y-auto px-2 relative py-8"
+            >
+              {lyrics ? (
+                lyrics.synced ? (
+                  <div className="space-y-4 py-24">
+                    {lyrics.lines.map((line, idx) => {
+                      const isActive = idx === currentLyricIndex;
+                      const isPast = currentLyricIndex >= 0 && idx < currentLyricIndex;
+                      return (
+                        <div
+                          key={idx}
+                          ref={(el) => {
+                            if (el) lyricLineRefs.current.set(idx, el);
+                          }}
+                          onClick={() => {
+                            window.dispatchEvent(
+                              new CustomEvent('player:seek', { detail: line.time }),
+                            );
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <motion.p
+                            animate={{
+                              fontSize: isActive ? '28px' : '18px',
+                              fontWeight: isActive ? 700 : 600,
+                              opacity: isActive ? 1 : isPast ? 0.35 : 0.45,
+                              color: isActive ? '#3B82F6' : '#94A3B8',
+                            }}
+                            transition={{ duration: 0.25 }}
+                            className={`leading-relaxed text-center ${
+                              isActive ? 'text-glow-blue font-bold' : ''
+                            }`}
+                          >
                             {line.text}
-                          </p>
-                        ))}
-                      </div>
-                    )
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-center">
-                      <Mic2 size={32} className="text-text/10 mb-2" />
-                      <span className="text-xs text-text/30">No lyrics available</span>
-                    </div>
-                  )}
-                </div>
+                          </motion.p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-4 text-center py-4">
+                    {lyrics.lines.map((line, idx) => (
+                      <p key={idx} className="text-sm text-text/60 leading-relaxed">
+                        {line.text}
+                      </p>
+                    ))}
+                  </div>
+                )
               ) : (
-                <QueuePanel isOverlay />
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <Mic2 size={32} className="text-text/10 mb-2" />
+                  <span className="text-xs text-text/30">No lyrics available</span>
+                </div>
               )}
             </div>
           </div>
         </div>
 
         {/* Footer specs */}
-        <div className="relative z-10 flex items-center justify-between shrink-0 h-10 border-t border-white/5 pt-4 text-[10px] text-text/35 font-mono">
+        <div className="relative z-10 flex items-center justify-between shrink-0 h-10 pt-4 text-[10px] text-text/35 font-mono">
           <div className="flex gap-4">
-            <span>
-              Codec: <span className="text-primary font-bold">{currentSong.codec}</span>
-            </span>
-            <span>
-              Bitrate: <span className="text-text/60">{formatBitrate(currentSong.bitrate)}</span>
-            </span>
-            <span>
-              Sample Rate:{' '}
-              <span className="text-text/60">{formatSampleRate(currentSong.sampleRate)}</span>
-            </span>
-            {currentSong.bitDepth > 0 && (
-              <span>
-                Bit Depth:{' '}
-                <span className="text-text/60">{formatBitDepth(currentSong.bitDepth)}</span>
-              </span>
-            )}
-            <span>
-              Channels:{' '}
-              <span className="text-text/60">{currentSong.channels === 1 ? 'Mono' : 'Stereo'}</span>
-            </span>
             <span>
               Size: <span className="text-text/60">{formatFileSize(currentSong.fileSize)}</span>
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Volume2 size={12} />
-            <div className="w-20 h-1 bg-white/10 rounded-full relative cursor-pointer">
-              <div
-                className="absolute left-0 top-0 h-full bg-primary rounded-full"
-                style={{ width: `${volume * 100}%` }}
-              />
-            </div>
-          </div>
         </div>
       </motion.div>
     </AnimatePresence>

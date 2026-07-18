@@ -136,3 +136,18 @@ input[type='range']:hover::-webkit-slider-thumb {
   will-change: transform, opacity;
   transform: translateZ(0);
 }
+
+/* ─── Overflow Marquee ──────────────────────────────────── */
+.bt-marquee-track {
+  animation: bt-marquee var(--bt-marquee-duration, 10s) linear infinite;
+  will-change: transform;
+}
+
+@keyframes bt-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--bt-marquee-distance, 120px)));
+  }
+}

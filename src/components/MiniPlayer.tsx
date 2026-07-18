@@ -38,32 +38,46 @@ export function MiniPlayer() {
     toggleQueue,
     toggleLyrics,
     toggleNowPlaying,
+    setIsSeeking: setStoreIsSeeking,
     playNext,
     playPrevious,
   } = usePlayerStore();
 
   const progressRef = useRef<HTMLDivElement>(null);
   const volumeRef = useRef<HTMLDivElement>(null);
-  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
   const [localTime, setLocalTime] = useState(0);
 
   useEffect(() => {
-    if (!isDraggingProgress) {
+    if (!isSeeking) {
       setLocalTime(currentTime);
     }
-  }, [currentTime, isDraggingProgress]);
+  }, [currentTime, isSeeking]);
+
+  useEffect(() => {
+    setStoreIsSeeking(isSeeking);
+  }, [isSeeking, setStoreIsSeeking]);
 
   const progress = duration > 0 ? (localTime / duration) * 100 : 0;
 
+
+
   const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!progressRef.current || !duration) return;
-    setIsDraggingProgress(true);
+    setIsSeeking(true);
+
+    const applySeek = (seekTime: number) => {
+      setCurrentTime(seekTime);
+      window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+    };
 
     const updateTimeFromEvent = (clientX: number) => {
       if (!progressRef.current) return;
       const rect = progressRef.current.getBoundingClientRect();
       const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      setLocalTime(percent * duration);
+      const seekTime = percent * duration;
+      setLocalTime(seekTime);
+      applySeek(seekTime);
     };
 
     updateTimeFromEvent(e.clientX);
@@ -73,14 +87,13 @@ export function MiniPlayer() {
     };
 
     const handleMouseUp = (upEvent: MouseEvent) => {
-      setIsDraggingProgress(false);
+      setIsSeeking(false);
 
       if (progressRef.current) {
         const rect = progressRef.current.getBoundingClientRect();
         const percent = Math.max(0, Math.min(1, (upEvent.clientX - rect.left) / rect.width));
         const seekTime = percent * duration;
-        setCurrentTime(seekTime);
-        window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+        applySeek(seekTime);
       }
 
       window.removeEventListener('mousemove', handleMouseMove);
@@ -149,7 +162,7 @@ export function MiniPlayer() {
         <motion.div
           className="absolute left-0 top-0 h-full bg-gradient-to-r from-primary to-accent"
           style={{ width: `${progress}%` }}
-          transition={isDraggingProgress ? { duration: 0 } : { duration: 0.1 }}
+          transition={isSeeking ? { duration: 0 } : { duration: 0.1 }}
         />
         <div
           className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-glow opacity-0 group-hover:opacity-100 transition-opacity"
@@ -188,7 +201,7 @@ export function MiniPlayer() {
             <Shuffle size={16} strokeWidth={1.8} />
           </ControlButton>
 
-          <ControlButton onClick={() => playPrevious()}>
+          <ControlButton onClick={playPrevious}>
             <SkipBack size={18} strokeWidth={1.8} fill="currentColor" />
           </ControlButton>
 
@@ -217,7 +230,7 @@ export function MiniPlayer() {
             </AnimatePresence>
           </motion.button>
 
-          <ControlButton onClick={() => playNext()}>
+          <ControlButton onClick={playNext}>
             <SkipForward size={18} strokeWidth={1.8} fill="currentColor" />
           </ControlButton>
 

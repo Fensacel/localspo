@@ -45,7 +45,12 @@ export interface ElectronAPI {
   };
   // Lyrics
   lyrics: {
-    read: (songId: string, lrcPath: string | null, hasEmbeddedLyrics: boolean) => Promise<{ source: string; content: string } | null>;
+    read: (
+      songId: string,
+      audioPath: string,
+      lrcPath: string | null,
+      hasEmbeddedLyrics: boolean,
+    ) => Promise<{ source: string; content: string } | null>;
   };
 }
 
@@ -90,8 +95,8 @@ const electronAPI: ElectronAPI = {
     },
   },
   lyrics: {
-    read: (songId, lrcPath, hasEmbeddedLyrics) =>
-      ipcRenderer.invoke('lyrics:read', songId, lrcPath, hasEmbeddedLyrics),
+    read: (songId, audioPath, lrcPath, hasEmbeddedLyrics) =>
+      ipcRenderer.invoke('lyrics:read', songId, audioPath, lrcPath, hasEmbeddedLyrics),
   },
 };
 

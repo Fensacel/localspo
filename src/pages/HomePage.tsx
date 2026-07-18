@@ -4,6 +4,7 @@ import { Play, Clock, Disc3, Music, Sparkles, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Song, Album } from '@/types';
+import { getImageUrl } from '@/utils';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -56,7 +57,7 @@ export function HomePage() {
     if (storedIds && storedDate === currentDateStr && storedLibSize === currentLibSizeStr) {
       try {
         idsToUse = JSON.parse(storedIds);
-      } catch (e) {
+      } catch {
         idsToUse = [];
       }
     }
@@ -190,9 +191,12 @@ export function HomePage() {
                 <div className="w-28 h-28 rounded-full glass flex items-center justify-center overflow-hidden">
                   {artist.coverPath ? (
                     <img
-                      src={`local-image://${encodeURIComponent(artist.coverPath)}`}
+                      src={getImageUrl(artist.coverPath)}
                       alt={artist.name}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
                     />
                   ) : (
                     <Music size={32} className="text-text/20" />
@@ -249,9 +253,7 @@ function EmptyLibrary() {
 }
 
 function HeroSection({ song }: { song: Song }) {
-  const coverSrc = song.coverPath
-    ? `local-image://${encodeURIComponent(song.coverPath)}`
-    : '/default-cover.png';
+  const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : '/default-cover.png';
 
   return (
     <div className="relative rounded-3xl overflow-hidden h-48 glass">
@@ -259,6 +261,9 @@ function HeroSection({ song }: { song: Song }) {
         src={coverSrc}
         alt=""
         className="absolute inset-0 w-full h-full object-cover opacity-30 blur-2xl scale-110"
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = '/default-cover.png';
+        }}
       />
       <div className="absolute inset-0 bg-gradient-to-r from-bg/90 via-bg/60 to-transparent" />
       <div className="relative flex items-center gap-6 p-6 h-full">
@@ -266,6 +271,9 @@ function HeroSection({ song }: { song: Song }) {
           src={coverSrc}
           alt={song.album}
           className="w-32 h-32 rounded-2xl object-cover shadow-xl"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/default-cover.png';
+          }}
         />
         <div>
           <p className="text-[10px] uppercase tracking-widest text-primary font-semibold mb-1">
@@ -313,9 +321,7 @@ interface QuickPickCardProps {
 }
 
 function QuickPickCard({ song, onPlay, isPlaying }: QuickPickCardProps) {
-  const coverSrc = song.coverPath
-    ? `local-image://${encodeURIComponent(song.coverPath)}`
-    : '/default-cover.png';
+  const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : '/default-cover.png';
 
   return (
     <motion.div
@@ -326,7 +332,14 @@ function QuickPickCard({ song, onPlay, isPlaying }: QuickPickCardProps) {
         isPlaying ? 'bg-primary/15 border border-primary/20' : 'glass hover:bg-white/5'
       }`}
     >
-      <img src={coverSrc} alt={song.album} className="w-12 h-12 rounded-lg object-cover" />
+      <img
+        src={coverSrc}
+        alt={song.album}
+        className="w-12 h-12 rounded-lg object-cover"
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = '/default-cover.png';
+        }}
+      />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold truncate">{song.title}</p>
         <p className="text-xs text-text/40 truncate">{song.artist}</p>
@@ -360,9 +373,7 @@ interface SongCardProps {
 }
 
 function SongCard({ song, onPlay, isPlaying }: SongCardProps) {
-  const coverSrc = song.coverPath
-    ? `local-image://${encodeURIComponent(song.coverPath)}`
-    : '/default-cover.png';
+  const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : '/default-cover.png';
 
   return (
     <motion.div
@@ -372,7 +383,14 @@ function SongCard({ song, onPlay, isPlaying }: SongCardProps) {
       className="group cursor-pointer"
     >
       <div className="relative rounded-card overflow-hidden aspect-square mb-3">
-        <img src={coverSrc} alt={song.album} className="w-full h-full object-cover" />
+        <img
+          src={coverSrc}
+          alt={song.album}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/default-cover.png';
+          }}
+        />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
           <motion.div
             initial={{ scale: 0 }}
@@ -412,9 +430,7 @@ interface AlbumCardProps {
 }
 
 function AlbumCard({ album, onPlay, onClick }: AlbumCardProps) {
-  const coverSrc = album.coverPath
-    ? `local-image://${encodeURIComponent(album.coverPath)}`
-    : '/default-cover.png';
+  const coverSrc = album.coverPath ? getImageUrl(album.coverPath) : '/default-cover.png';
 
   return (
     <motion.div
@@ -424,7 +440,14 @@ function AlbumCard({ album, onPlay, onClick }: AlbumCardProps) {
       className="group cursor-pointer"
     >
       <div className="relative rounded-card overflow-hidden aspect-square mb-3">
-        <img src={coverSrc} alt={album.name} className="w-full h-full object-cover" />
+        <img
+          src={coverSrc}
+          alt={album.name}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/default-cover.png';
+          }}
+        />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
           <motion.button
             whileHover={{ scale: 1.1 }}
