@@ -1,0 +1,211 @@
+import { usePlaylistStore } from '@/stores';
+import { ListMusic, Plus, Pin, Heart, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+export function PlaylistsPage() {
+  const { playlists, createPlaylist, deletePlaylist, togglePinPlaylist, toggleFavoritePlaylist } =
+    usePlaylistStore();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
+  const navigate = useNavigate();
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlaylistName.trim()) return;
+
+    await createPlaylist(newPlaylistName, newPlaylistDesc);
+    setNewPlaylistName('');
+    setNewPlaylistDesc('');
+    setShowCreateModal(false);
+  };
+
+  // Sort playlists: pinned first, then newest
+  const sortedPlaylists = [...playlists].sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return b.createdAt - a.createdAt;
+  });
+
+  return (
+    <div className="relative">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Playlists</h1>
+          <p className="text-sm text-text/40 mt-1">
+            {playlists.length} playlist{playlists.length !== 1 ? 's' : ''} created
+          </p>
+        </div>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-primary rounded-button text-sm font-semibold text-white shadow-glow hover:bg-primary-hover transition-colors"
+        >
+          <Plus size={16} />
+          New Playlist
+        </motion.button>
+      </div>
+
+      {sortedPlaylists.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
+          {sortedPlaylists.map((playlist) => {
+            const coverSrc = playlist.coverPath
+              ? `local-image://${encodeURIComponent(playlist.coverPath)}`
+              : null;
+
+            return (
+              <motion.div
+                key={playlist.id}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => navigate(`/playlists/${playlist.id}`)}
+                className="group cursor-pointer relative"
+              >
+                <div className="relative rounded-card overflow-hidden aspect-square mb-3 shadow-glass bg-white/[0.02]">
+                  {coverSrc ? (
+                    <img
+                      src={coverSrc}
+                      alt={playlist.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-text/10 group-hover:text-primary/25 transition-colors">
+                      <ListMusic size={48} strokeWidth={1.2} />
+                    </div>
+                  )}
+
+                  {/* Actions overlay */}
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePinPlaylist(playlist.id);
+                      }}
+                      className={`p-1.5 rounded-lg glass hover:scale-110 transition-transform ${
+                        playlist.isPinned ? 'text-primary' : 'text-text/50 hover:text-text'
+                      }`}
+                    >
+                      <Pin size={12} fill={playlist.isPinned ? 'currentColor' : 'none'} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavoritePlaylist(playlist.id);
+                      }}
+                      className={`p-1.5 rounded-lg glass hover:scale-110 transition-transform ${
+                        playlist.isFavorite ? 'text-red-500' : 'text-text/50 hover:text-text'
+                      }`}
+                    >
+                      <Heart size={12} fill={playlist.isFavorite ? 'currentColor' : 'none'} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('Are you sure you want to delete this playlist?')) {
+                          deletePlaylist(playlist.id);
+                        }
+                      }}
+                      className="p-1.5 rounded-lg glass hover:scale-110 hover:text-danger text-text/50 transition-all"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+
+                  {/* Songs counter indicator */}
+                  <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md glass text-[10px] font-mono tracking-wide text-text/70">
+                    {playlist.songIds.length} song{playlist.songIds.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+
+                <div className="px-1">
+                  <div className="flex items-center gap-1.5">
+                    {playlist.isPinned && (
+                      <Pin size={10} className="text-primary transform rotate-45" />
+                    )}
+                    <p className="text-sm font-semibold truncate flex-1">{playlist.name}</p>
+                  </div>
+                  <p className="text-xs text-text/30 truncate mt-0.5">
+                    {playlist.description || 'No description'}
+                  </p>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center h-[50vh] text-center">
+          <div className="w-24 h-24 glass rounded-2xl flex items-center justify-center mb-4">
+            <ListMusic size={36} className="text-text/20" />
+          </div>
+          <p className="text-text/40 text-sm">No playlists yet</p>
+          <p className="text-text/20 text-xs mt-1">Create a playlist to organize your music</p>
+        </div>
+      )}
+
+      {/* Create Modal overlay */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md glass rounded-2xl p-6 shadow-glow"
+            >
+              <h3 className="text-lg font-bold mb-4">Create Playlist</h3>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-text/40 mb-1.5">
+                    Playlist Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newPlaylistName}
+                    onChange={(e) => setNewPlaylistName(e.target.value)}
+                    placeholder="My Awesome Playlist"
+                    className="w-full px-4 py-2.5 glass rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-text/40 mb-1.5">
+                    Description
+                  </label>
+                  <textarea
+                    value={newPlaylistDesc}
+                    onChange={(e) => setNewPlaylistDesc(e.target.value)}
+                    placeholder="Add an optional description"
+                    rows={3}
+                    className="w-full px-4 py-2.5 glass rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                  />
+                </div>
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPlaylistName('');
+                      setNewPlaylistDesc('');
+                      setShowCreateModal(false);
+                    }}
+                    className="px-4 py-2 text-sm text-text/50 hover:text-text transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-primary rounded-button text-sm font-semibold text-white shadow-glow hover:bg-primary-hover transition-colors"
+                  >
+                    Create
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
