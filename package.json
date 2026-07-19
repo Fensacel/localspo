@@ -1,7 +1,7 @@
 {
   "name": "localspo",
   "version": "1.0.1",
-  "description": "Premium Desktop Local Music Player",
+  "description": "Media Player",
   "main": "dist-electron/main.js",
   "author": "LocalSpo",
   "license": "MIT",
