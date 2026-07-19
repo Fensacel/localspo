@@ -4,6 +4,8 @@ import { Play, Disc3, Music, ListMusic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Song, Album, Playlist } from '@/types';
 import { getImageUrl } from '@/utils';
+import { useState } from 'react';
+import { SongContextMenu } from '@/components/SongContextMenu';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -23,6 +25,7 @@ export function HomePage() {
   const { playlists } = usePlaylistStore();
   const { setQueue, currentSong, isPlaying, setIsPlaying } = usePlayerStore();
   const navigate = useNavigate();
+  const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
 
   const recentlyAdded = [...songs].sort((a, b) => b.addedAt - a.addedAt).slice(0, 10);
   const topAlbums = albums.slice(0, 10);
@@ -34,20 +37,20 @@ export function HomePage() {
       window.dispatchEvent(new CustomEvent('player:toggle'));
     } else {
       const idx = recentlyAdded.findIndex((s) => s.id === song.id);
-      setQueue(recentlyAdded, idx >= 0 ? idx : 0);
+      setQueue(recentlyAdded, idx >= 0 ? idx : 0, 'Recently Added');
     }
   };
 
   const handlePlayAlbum = (album: Album) => {
     const albumSongs = useLibraryStore.getState().getAlbumSongs(album.id);
-    if (albumSongs.length > 0) setQueue(albumSongs, 0);
+    if (albumSongs.length > 0) setQueue(albumSongs, 0, album.name);
   };
 
   const handlePlayPlaylist = (playlist: Playlist) => {
     const playlistSongs = playlist.songIds
       .map((id) => useLibraryStore.getState().getSongById(id))
       .filter((s): s is Song => s !== undefined);
-    if (playlistSongs.length > 0) setQueue(playlistSongs, 0);
+    if (playlistSongs.length > 0) setQueue(playlistSongs, 0, playlist.name);
   };
 
   if (songs.length === 0) {
@@ -96,6 +99,10 @@ export function HomePage() {
                 song={song}
                 onPlay={() => handlePlaySong(song)}
                 isPlaying={currentSong?.id === song.id && isPlaying}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ song, x: e.clientX, y: e.clientY });
+                }}
               />
             ))}
           </div>
@@ -154,6 +161,14 @@ export function HomePage() {
             ))}
           </div>
         </motion.div>
+      )}
+      {contextMenu && (
+        <SongContextMenu
+          song={contextMenu.song}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </motion.div>
   );
@@ -311,9 +326,10 @@ interface SongCardProps {
   song: Song;
   onPlay: () => void;
   isPlaying: boolean;
+  onContextMenu: (e: React.MouseEvent) => void;
 }
 
-function SongCard({ song, onPlay, isPlaying }: SongCardProps) {
+function SongCard({ song, onPlay, isPlaying, onContextMenu }: SongCardProps) {
   const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : '/default-cover.png';
 
   return (
@@ -321,6 +337,7 @@ function SongCard({ song, onPlay, isPlaying }: SongCardProps) {
       whileHover={{ scale: 1.03 }}
       whileTap={{ scale: 0.97 }}
       onClick={onPlay}
+      onContextMenu={onContextMenu}
       className="group cursor-pointer shrink-0 w-40"
     >
       <div className="relative rounded-xl overflow-hidden aspect-square mb-3 shadow-md">

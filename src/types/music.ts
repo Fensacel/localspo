@@ -25,6 +25,7 @@ export interface Song {
   lrcPath: string | null;
   addedAt: number;
   playCount: number;
+  isUserQueued?: boolean;
 }
 
 // ─── Album ──────────────────────────────────────────────

@@ -57,7 +57,7 @@ export function ArtistDetailPage() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => {
-              if (artistSongs.length > 0) setQueue(artistSongs, 0);
+              if (artistSongs.length > 0) setQueue(artistSongs, 0, artist.name);
             }}
             className="flex items-center gap-2 px-6 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
           >

@@ -129,16 +129,80 @@ export function LyricsView() {
 
           {/* Synced lyrics */}
           {!isLoading && lyrics?.synced && (
-            <div className="space-y-7 md:space-y-9">
+            <div className="space-y-6 md:space-y-8">
               {lyrics.lines.map((line, index) => {
                 const isActive = index === currentIndex;
                 const isPast = currentIndex >= 0 && index < currentIndex;
 
-                // Calm monochrome text styling:
-                // Active line is fully opaque white.
-                // Inactive/past lines are faded dark gray (matching Spotify's contrast layout).
-                const textColorClass = isActive ? 'text-white' : 'text-zinc-600';
-                const opacityValue = isActive ? 1 : isPast ? 0.65 : 0.85;
+                if (isActive) {
+                  const tokens = line.text.split(/(\s+)/);
+                  const wordsOnly = tokens.filter((t) => t.trim().length > 0);
+                  const totalChars = wordsOnly.reduce((acc, w) => acc + w.length, 0);
+                  const lineStart = line.time;
+                  const lineEnd = line.endTime || (line.time + 3.5);
+                  const lineDuration = Math.max(0.5, lineEnd - lineStart);
+
+                  let cumulativeChars = 0;
+
+                  return (
+                    <div
+                      key={`${line.time}-${index}`}
+                      ref={(el) => {
+                        if (el) lineRefs.current.set(index, el);
+                      }}
+                      className={`transition-all duration-300 transform origin-left ${
+                        seekByLyricsEnabled ? 'cursor-pointer hover:scale-[1.015]' : 'cursor-default'
+                      }`}
+                      onClick={() => {
+                        if (!seekByLyricsEnabled) return;
+                        const duration = usePlayerStore.getState().duration;
+                        const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
+                        usePlayerStore.getState().setCurrentTime(seekTime);
+                        window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                      }}
+                    >
+                      <motion.p
+                        animate={{
+                          opacity: 1,
+                          scale: 1.025,
+                        }}
+                        transition={{ duration: 0.35, ease: 'easeOut' }}
+                        className="text-3xl md:text-5xl font-extrabold tracking-tight leading-snug text-white"
+                        style={{
+                          textShadow: '0 4px 20px rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        {totalChars === 0 ? line.text : tokens.map((token, tokenIdx) => {
+                          const isWhitespace = token.trim().length === 0;
+                          if (isWhitespace) {
+                            return <span key={tokenIdx}>{token}</span>;
+                          }
+
+                          const wordLength = token.length;
+                          const wordStartOffset = (cumulativeChars / totalChars) * lineDuration;
+                          const wordStart = lineStart + wordStartOffset;
+                          const isWordActive = currentTime >= wordStart;
+
+                          cumulativeChars += wordLength;
+
+                          return (
+                            <motion.span
+                              key={tokenIdx}
+                              animate={{
+                                color: isWordActive ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
+                                textShadow: isWordActive ? '0 0 12px rgba(255, 255, 255, 0.4)' : 'none',
+                              }}
+                              transition={{ duration: 0.15 }}
+                              className="inline-block"
+                            >
+                              {token}
+                            </motion.span>
+                          );
+                        })}
+                      </motion.p>
+                    </div>
+                  );
+                }
 
                 return (
                   <div
@@ -151,7 +215,6 @@ export function LyricsView() {
                     }`}
                     onClick={() => {
                       if (!seekByLyricsEnabled) return;
-                      console.log('[LyricsView] Line clicked. Seek to:', line.time);
                       const duration = usePlayerStore.getState().duration;
                       const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
                       usePlayerStore.getState().setCurrentTime(seekTime);
@@ -160,14 +223,11 @@ export function LyricsView() {
                   >
                     <motion.p
                       animate={{
-                        opacity: opacityValue,
-                        scale: isActive ? 1.025 : 1.0,
+                        opacity: isPast ? 0.35 : 0.5,
+                        scale: 1.0,
                       }}
-                      transition={{ duration: 0.3, ease: 'easeOut' }}
-                      className={`text-2xl md:text-4xl font-extrabold tracking-tight leading-snug ${textColorClass}`}
-                      style={{
-                        textShadow: isActive ? '0 4px 20px rgba(255,255,255,0.08)' : 'none',
-                      }}
+                      transition={{ duration: 0.35, ease: 'easeOut' }}
+                      className="text-xl md:text-3xl font-bold tracking-tight leading-snug text-white"
                     >
                       {line.text || '♪'}
                     </motion.p>

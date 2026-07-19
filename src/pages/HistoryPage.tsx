@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { formatTime } from '@/utils';
 import type { Song } from '@/types';
 import { useState, useMemo } from 'react';
+import { SongContextMenu } from '@/components/SongContextMenu';
 
 type Tab = 'recent' | 'stats';
 type Period = 'day' | 'week' | 'month';
@@ -14,6 +15,7 @@ export function HistoryPage() {
   const { setQueue, currentSong } = usePlayerStore();
   const [activeTab, setActiveTab] = useState<Tab>('recent');
   const [activePeriod, setActivePeriod] = useState<Period>('week');
+  const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
 
   // Map history entries to song objects and filter out any undefined songs
   const historySongs = useMemo(() => {
@@ -51,11 +53,11 @@ export function HistoryPage() {
   const handlePlaySong = (song: Song & { playedAt: number }) => {
     const songList = historySongs.map((hs) => ({ ...hs }));
     const index = songList.findIndex((s) => s.id === song.id);
-    setQueue(songList, index >= 0 ? index : 0);
+    setQueue(songList, index >= 0 ? index : 0, 'History');
   };
 
   const handlePlayStatsSong = (song: Song) => {
-    setQueue([song], 0);
+    setQueue([song], 0, 'Most Played');
   };
 
   const formatPlayedAt = (timestamp: number) => {
@@ -140,6 +142,10 @@ export function HistoryPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.02 }}
                   onDoubleClick={() => handlePlaySong(song)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({ song, x: event.clientX, y: event.clientY });
+                  }}
                   className={`group flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-colors ${
                     isCurrent ? 'bg-primary/10' : 'hover:bg-white/[0.03]'
                   }`}
@@ -232,6 +238,10 @@ export function HistoryPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.02 }}
                     onDoubleClick={() => handlePlayStatsSong(song)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setContextMenu({ song, x: event.clientX, y: event.clientY });
+                    }}
                     className={`group flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-colors ${
                       isCurrent ? 'bg-primary/10' : 'hover:bg-white/[0.03]'
                     }`}
@@ -304,6 +314,14 @@ export function HistoryPage() {
             </div>
           )}
         </div>
+      )}
+      {contextMenu && (
+        <SongContextMenu
+          song={contextMenu.song}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

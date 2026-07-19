@@ -1,6 +1,6 @@
 # Product Requirement Document
 
-# bluetune
+# LocalSpo
 
 Version 1.0
 
@@ -8,7 +8,7 @@ Version 1.0
 
 ## Vision
 
-bluetune adalah aplikasi desktop music player premium untuk Windows yang fokus pada kualitas audio, pengalaman pengguna modern, dan pengelolaan koleksi musik lokal.
+LocalSpo adalah aplikasi desktop music player premium untuk Windows yang fokus pada kualitas audio, pengalaman pengguna modern, dan pengelolaan koleksi musik lokal.
 
 Targetnya adalah menjadi alternatif terbaik untuk:
 

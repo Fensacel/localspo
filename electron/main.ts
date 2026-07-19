@@ -159,7 +159,7 @@ function serveLocalFile(filePath: string, request: Request): Response {
 
 // Register protocol for local audio files
 function registerLocalProtocol(): void {
-  const logFile = path.join(app.getPath('userData'), 'bluetune', 'protocol-debug.log');
+  const logFile = path.join(app.getPath('userData'), 'localspo', 'protocol-debug.log');
   const log = (msg: string) => {
     try {
       fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`, 'utf-8');

@@ -1,12 +1,12 @@
-# bluetune UI Guide
+# LocalSpo UI Guide
 
 ---
 
 # Design Philosophy
 
-bluetune bukan sekadar music player.
+LocalSpo bukan sekadar music player.
 
-bluetune harus terasa seperti aplikasi desktop premium.
+LocalSpo harus terasa seperti aplikasi desktop premium.
 
 Keyword
 

@@ -4,14 +4,16 @@ import { motion } from 'framer-motion';
 import { Play, Pause, Heart } from 'lucide-react';
 import { formatTime, isLossless } from '@/utils';
 import type { Song } from '@/types';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { AddToPlaylistMenu } from '@/components/AddToPlaylistMenu';
+import { SongContextMenu } from '@/components/SongContextMenu';
 
 export function AlbumDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { getAlbumById, getAlbumSongs } = useLibraryStore();
   const { currentSong, isPlaying, setQueue, setIsPlaying } = usePlayerStore();
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
+  const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
 
   const album = id ? getAlbumById(id) : undefined;
   const songs = useMemo(() => (id ? getAlbumSongs(id) : []), [id, getAlbumSongs]);
@@ -19,8 +21,8 @@ export function AlbumDetailPage() {
   const totalDuration = useMemo(() => songs.reduce((acc, s) => acc + s.duration, 0), [songs]);
 
   const handlePlayAll = useCallback(() => {
-    if (songs.length > 0) setQueue(songs, 0);
-  }, [songs, setQueue]);
+    if (songs.length > 0 && album) setQueue(songs, 0, album.name);
+  }, [songs, album, setQueue]);
 
   const handlePlaySong = useCallback(
     (song: Song) => {
@@ -29,10 +31,10 @@ export function AlbumDetailPage() {
         window.dispatchEvent(new CustomEvent('player:toggle'));
       } else {
         const index = songs.findIndex((s) => s.id === song.id);
-        setQueue(songs, index);
+        if (album) setQueue(songs, index, album.name);
       }
     },
-    [currentSong, isPlaying, songs, setQueue, setIsPlaying],
+    [currentSong, isPlaying, songs, album, setQueue, setIsPlaying],
   );
 
   if (!album) {
@@ -108,6 +110,10 @@ export function AlbumDetailPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.03 }}
               onDoubleClick={() => handlePlaySong(song)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setContextMenu({ song, x: event.clientX, y: event.clientY });
+              }}
               className={`group grid grid-cols-[40px_1fr_100px_40px_40px_80px] gap-4 px-4 py-3 rounded-xl cursor-pointer transition-all duration-200 ${
                 isCurrent
                   ? 'bg-primary/10 border-l-2 border-primary'
@@ -190,6 +196,14 @@ export function AlbumDetailPage() {
           );
         })}
       </div>
+      {contextMenu && (
+        <SongContextMenu
+          song={contextMenu.song}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

@@ -179,7 +179,7 @@ export function SearchPage() {
                         onDoubleClick={() => {
                           const sortedSongs = [...songs].sort((a, b) => a.title.localeCompare(b.title));
                           const index = sortedSongs.findIndex((s) => s.id === song.id);
-                          setQueue(sortedSongs, index >= 0 ? index : 0);
+                          setQueue(sortedSongs, index >= 0 ? index : 0, 'Search');
                         }}
                         className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${
                           isCurrent ? 'bg-primary/10' : 'hover:bg-white/[0.03]'

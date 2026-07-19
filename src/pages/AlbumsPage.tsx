@@ -56,7 +56,7 @@ function AlbumGridCard({ album, onClick }: { album: Album; onClick: () => void }
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     const albumSongs = useLibraryStore.getState().getAlbumSongs(album.id);
-    if (albumSongs.length > 0) setQueue(albumSongs, 0);
+    if (albumSongs.length > 0) setQueue(albumSongs, 0, album.name);
   };
 
   return (

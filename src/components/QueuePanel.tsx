@@ -20,6 +20,8 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
     moveInQueue,
     setIsPlaying,
     toggleQueue,
+    clearUserQueue,
+    sourceName,
   } = usePlayerStore();
 
   const activeRowRef = useRef<HTMLDivElement | null>(null);
@@ -87,8 +89,11 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
   }
 
   // Segment queue: previous, current, next
-  const previousSongs = queue.slice(0, queueIndex);
   const nextSongs = queue.slice(queueIndex + 1);
+
+  // Split into manual user queue and regular next up
+  const userQueuedSongs = nextSongs.filter((s) => s.isUserQueued);
+  const nextUpSongs = nextSongs.filter((s) => !s.isUserQueued);
 
   return (
     <div className="flex flex-col h-full min-h-0 text-left">
@@ -110,76 +115,6 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
 
       {/* Queue items list */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pr-1 scrollbar-thin">
-        {/* Previous Songs Section */}
-        {previousSongs.length > 0 && (
-          <div>
-            <h4 className="text-[10px] uppercase font-bold text-text/30 tracking-widest mb-2 px-1">
-              Previously Played ({previousSongs.length})
-            </h4>
-            <div className="space-y-0.5">
-              {previousSongs.map((song, idx) => {
-                const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : null;
-                return (
-                  <div
-                    key={`prev-${song.id}-${idx}`}
-                    onDoubleClick={() => handlePlaySong(idx)}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, idx)}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, idx)}
-                    className="group flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer border-l-2 border-transparent transition-all"
-                  >
-                    <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-white/[0.02] flex items-center justify-center">
-                      {coverSrc ? (
-                        <img src={coverSrc} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <Music size={12} className="text-text/20" />
-                      )}
-                      <button
-                        onClick={() => handlePlaySong(idx)}
-                        className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"
-                      >
-                        <Play size={10} fill="currentColor" />
-                      </button>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-text/70 truncate">{song.title}</p>
-                      <p className="text-[10px] text-text/40 truncate">{song.artist}</p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => handleMoveUp(idx, e)}
-                        disabled={idx === 0}
-                        className="p-1 hover:text-primary text-text/30 disabled:opacity-20"
-                      >
-                        <ChevronUp size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => handleMoveDown(idx, e)}
-                        className="p-1 hover:text-primary text-text/30"
-                      >
-                        <ChevronDown size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFromQueue(idx);
-                        }}
-                        className="p-1 hover:text-danger text-text/30"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-text/25 font-mono group-hover:hidden select-none shrink-0">
-                      {formatTime(song.duration)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Current Song Section */}
         {currentSong && (
           <div>
@@ -237,19 +172,98 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
           </div>
         )}
 
-        {/* Next Up Section */}
-        {nextSongs.length > 0 && (
+        {/* Next in Queue Section */}
+        {userQueuedSongs.length > 0 && (
           <div>
-            <h4 className="text-[10px] uppercase font-bold text-text/30 tracking-widest mb-2 px-1">
-              Next Up ({nextSongs.length})
-            </h4>
+            <div className="flex justify-between items-center mb-2 px-1">
+              <h4 className="text-[10px] uppercase font-bold text-text/30 tracking-widest">
+                Next in queue
+              </h4>
+              <button
+                onClick={clearUserQueue}
+                className="text-[10px] font-semibold text-text/40 hover:text-primary transition-colors cursor-pointer"
+              >
+                Clear queue
+              </button>
+            </div>
             <div className="space-y-0.5">
-              {nextSongs.map((song, idx) => {
-                const actualIndex = queueIndex + 1 + idx;
+              {userQueuedSongs.map((song, idx) => {
+                const actualIndex = queue.indexOf(song, queueIndex + 1);
                 const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : null;
                 return (
                   <div
-                    key={`next-${song.id}-${idx}`}
+                    key={`user-queue-${song.id}-${idx}`}
+                    onDoubleClick={() => handlePlaySong(actualIndex)}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, actualIndex)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, actualIndex)}
+                    className="group flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer border-l-2 border-transparent transition-all"
+                  >
+                    <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-white/[0.02] flex items-center justify-center">
+                      {coverSrc ? (
+                        <img src={coverSrc} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <Music size={12} className="text-text/20" />
+                      )}
+                      <button
+                        onClick={() => handlePlaySong(actualIndex)}
+                        className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"
+                      >
+                        <Play size={10} fill="currentColor" />
+                      </button>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-text/80 truncate">{song.title}</p>
+                      <p className="text-[10px] text-text/40 truncate">{song.artist}</p>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => handleMoveUp(actualIndex, e)}
+                        className="p-1 hover:text-primary text-text/30"
+                      >
+                        <ChevronUp size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => handleMoveDown(actualIndex, e)}
+                        disabled={actualIndex === queue.length - 1}
+                        className="p-1 hover:text-primary text-text/30 disabled:opacity-20"
+                      >
+                        <ChevronDown size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromQueue(actualIndex);
+                        }}
+                        className="p-1 hover:text-danger text-text/30"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-text/25 font-mono group-hover:hidden select-none shrink-0">
+                      {formatTime(song.duration)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Next Up Section */}
+        {nextUpSongs.length > 0 && (
+          <div>
+            <h4 className="text-[10px] uppercase font-bold text-text/30 tracking-widest mb-2 px-1">
+              Next from: {sourceName || currentSong?.album || 'Current Source'}
+            </h4>
+            <div className="space-y-0.5">
+              {nextUpSongs.map((song, idx) => {
+                const actualIndex = queue.indexOf(song, queueIndex + 1);
+                const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : null;
+                return (
+                  <div
+                    key={`next-up-${song.id}-${idx}`}
                     onDoubleClick={() => handlePlaySong(actualIndex)}
                     draggable
                     onDragStart={(e) => handleDragStart(e, actualIndex)}

@@ -3,11 +3,14 @@ import { Heart, Play, Music } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatTime } from '@/utils';
 import type { Song } from '@/types';
+import { useState } from 'react';
+import { SongContextMenu } from '@/components/SongContextMenu';
 
 export function FavoritesPage() {
   const { songIds, toggleFavoriteSong } = useFavoritesStore();
   const { getSongById } = useLibraryStore();
   const { setQueue, currentSong, isPlaying } = usePlayerStore();
+  const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
 
   // Map favorite song IDs to actual song objects
   const favoriteSongs = songIds
@@ -16,7 +19,7 @@ export function FavoritesPage() {
 
   const handlePlaySong = (song: Song) => {
     const index = favoriteSongs.findIndex((s) => s.id === song.id);
-    setQueue(favoriteSongs, index >= 0 ? index : 0);
+    setQueue(favoriteSongs, index >= 0 ? index : 0, 'Favorites');
   };
 
   return (
@@ -35,7 +38,7 @@ export function FavoritesPage() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setQueue(favoriteSongs, 0)}
+            onClick={() => setQueue(favoriteSongs, 0, 'Favorites')}
             className="flex items-center gap-2 px-5 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
           >
             <Play size={16} fill="currentColor" />
@@ -59,6 +62,10 @@ export function FavoritesPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.02 }}
                 onDoubleClick={() => handlePlaySong(song)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setContextMenu({ song, x: event.clientX, y: event.clientY });
+                }}
                 className={`group flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-colors ${
                   isCurrent ? 'bg-primary/10' : 'hover:bg-white/[0.03]'
                 }`}
@@ -127,6 +134,14 @@ export function FavoritesPage() {
           <p className="text-text/40 text-sm">No favorites yet</p>
           <p className="text-text/20 text-xs mt-1">Songs you love will appear here</p>
         </div>
+      )}
+      {contextMenu && (
+        <SongContextMenu
+          song={contextMenu.song}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

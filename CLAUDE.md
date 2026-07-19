@@ -2,9 +2,9 @@
 
 ## Project
 
-bluetune
+LocalSpo
 
-bluetune adalah aplikasi desktop Local Music Player premium.
+LocalSpo adalah aplikasi desktop Local Music Player premium.
 
 Seluruh aplikasi berjalan secara offline.
 

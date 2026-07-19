@@ -1,6 +1,6 @@
 # Architecture
 
-bluetune menggunakan Clean Architecture.
+LocalSpo menggunakan Clean Architecture.
 
 ```
 Electron Main Process
@@ -64,7 +64,7 @@ public/
 ## Storage
 
 ```
-bluetune/
+localspo/
 
 library.json
 

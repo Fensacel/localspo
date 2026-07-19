@@ -5,6 +5,7 @@ import { Play, Pause, Trash2, Music, ListMusic, Heart, List, Check, Camera, X, C
 import { formatTime } from '@/utils';
 import type { Song } from '@/types';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
+import { SongContextMenu } from '@/components/SongContextMenu';
 
 export function PlaylistDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +23,7 @@ export function PlaylistDetailPage() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [descValue, setDescValue] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const descInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -121,8 +123,8 @@ export function PlaylistDetailPage() {
   }, [playlist, songs, recommendationSeed]);
 
   const handlePlayAll = useCallback(() => {
-    if (sortedSongs.length > 0) setQueue(sortedSongs, 0);
-  }, [sortedSongs, setQueue]);
+    if (sortedSongs.length > 0 && playlist) setQueue(sortedSongs, 0, playlist.name);
+  }, [sortedSongs, playlist, setQueue]);
 
   const handlePlaySong = useCallback(
     (song: Song) => {
@@ -131,10 +133,10 @@ export function PlaylistDetailPage() {
         window.dispatchEvent(new CustomEvent('player:toggle'));
       } else {
         const index = sortedSongs.findIndex((s) => s.id === song.id);
-        setQueue(sortedSongs, index >= 0 ? index : 0);
+        if (playlist) setQueue(sortedSongs, index >= 0 ? index : 0, playlist.name);
       }
     },
-    [currentSong, isPlaying, sortedSongs, setQueue, setIsPlaying],
+    [currentSong, isPlaying, sortedSongs, playlist, setQueue, setIsPlaying],
   );
 
   const handleDelete = () => {
@@ -449,6 +451,10 @@ export function PlaylistDetailPage() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.02 }}
                 onDoubleClick={() => handlePlaySong(song)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setContextMenu({ song, x: event.clientX, y: event.clientY });
+                }}
                 className={`group grid grid-cols-[40px_1fr_1fr_40px_40px_80px] gap-4 px-4 py-2.5 rounded-xl cursor-pointer transition-all duration-200 ${
                   isCurrent
                     ? 'bg-primary/10 border-l-2 border-primary'
@@ -669,6 +675,19 @@ export function PlaylistDetailPage() {
           </div>
         )}
       </AnimatePresence>
+      {contextMenu && (
+        <SongContextMenu
+          song={contextMenu.song}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onRemoveFromPlaylist={() => {
+            if (playlist) {
+              removeSongFromPlaylist(playlist.id, contextMenu.song.id);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

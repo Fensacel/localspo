@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Project Status
-- **Project Name:** bluetune
+- **Project Name:** LocalSpo
 - **Target Platform:** Windows Desktop (Electron)
 - **Current Phase:** Phase 7 (Playlists & Favorites integration) & Phase 10 (Build Verification)
 
@@ -19,7 +19,7 @@
 
 ## Key Decisions & Progress
 - **Dynamic Backgrounds:** Extract dominant color from album cover using canvas in renderer to dynamically adjust theme accents (opacity <15% for background glows).
-- **Embedded Lyrics / LRC Support:** Embedded lyrics are cached to `.txt` files under `userData/bluetune/cache/lyrics/` when scanned, and synced LRC files are read directly from path.
+- **Embedded Lyrics / LRC Support:** Embedded lyrics are cached to `.txt` files under `userData/localspo/cache/lyrics/` when scanned, and synced LRC files are read directly from path.
 - **Offline Files Protocols:** Registered custom protocols `local-audio` and `local-image` as privileged standard secure schemes with Chromium (`registerSchemesAsPrivileged` with `stream: true`) to bypass Web Security local resource loading blocks and enable audio seeking/streaming. Also normalized Windows backslashes for `net.fetch` compatibility.
 - **Vite Electron Plugin Config:** Adjusted `vite-plugin-electron` configurations in `package.json` to match versions compatible with the NPM registry.
 - **State Management & Persistence:** Created `useFavoritesStore` (favorites.json), `useHistoryStore` (history.json), and `usePlaylistStore` (playlist.json) to handle library actions and listen counts.

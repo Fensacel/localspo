@@ -1,6 +1,6 @@
-# bluetune
+# LocalSpo
 
-bluetune adalah aplikasi desktop premium untuk memutar koleksi musik lokal.
+LocalSpo adalah aplikasi desktop premium untuk memutar koleksi musik lokal.
 
 ## Features
 
