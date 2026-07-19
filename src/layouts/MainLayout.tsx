@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Titlebar } from '@/components/Titlebar';
 import { Sidebar } from '@/components/Sidebar';
 import { MiniPlayer } from '@/components/MiniPlayer';
@@ -8,13 +8,19 @@ import { useState, useEffect } from 'react';
 import { extractDominantColor, getImageUrl } from '@/utils';
 import { NowPlayingOverlay } from '@/features/player/NowPlayingOverlay';
 import { QueuePanel } from '@/components/QueuePanel';
+import { LyricsView } from '@/features/lyrics/LyricsView';
+import { NowPlayingPanel } from '@/components/NowPlayingPanel';
 
 export function MainLayout() {
+  const location = useLocation();
   const currentSong = usePlayerStore((s) => s.currentSong);
   const showNowPlaying = usePlayerStore((s) => s.showNowPlaying);
+  const showNowPlayingSidebar = usePlayerStore((s) => s.showNowPlayingSidebar);
+  const toggleNowPlayingSidebar = usePlayerStore((s) => s.toggleNowPlayingSidebar);
+  const showLyrics = usePlayerStore((s) => s.showLyrics);
   const showQueue = usePlayerStore((s) => s.showQueue);
   const toggleQueue = usePlayerStore((s) => s.toggleQueue);
-  const [bgColor, setBgColor] = useState<[number, number, number]>([59, 130, 246]);
+  const [bgColor, setBgColor] = useState<[number, number, number]>([110, 110, 110]);
 
   // Dynamic background based on album cover
   useEffect(() => {
@@ -22,7 +28,7 @@ export function MainLayout() {
       const src = getImageUrl(currentSong.coverPath);
       extractDominantColor(src).then(setBgColor);
     } else {
-      setBgColor([59, 130, 246]);
+      setBgColor([110, 110, 110]);
     }
   }, [currentSong?.coverPath]);
 
@@ -48,16 +54,29 @@ export function MainLayout() {
         {/* Content */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
           <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="p-6 pb-4"
-            >
-              <Outlet />
-            </motion.div>
+            {showLyrics ? (
+              <motion.div
+                key="lyrics-view"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="absolute inset-0 z-10"
+              >
+                <LyricsView />
+              </motion.div>
+            ) : (
+              <motion.div
+                key={location.pathname}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="p-6 pb-4"
+              >
+                <Outlet />
+              </motion.div>
+            )}
           </AnimatePresence>
         </main>
 
@@ -73,6 +92,23 @@ export function MainLayout() {
             >
               <div className="w-[320px] h-full flex flex-col">
                 <QueuePanel onClose={toggleQueue} />
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        {/* Now Playing Sidebar */}
+        <AnimatePresence>
+          {showNowPlayingSidebar && (
+            <motion.aside
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="h-full border-l border-white/5 bg-white/[0.01] backdrop-blur-md flex flex-col shrink-0 overflow-hidden relative z-20"
+            >
+              <div className="w-[320px] h-full flex flex-col">
+                <NowPlayingPanel onClose={toggleNowPlayingSidebar} />
               </div>
             </motion.aside>
           )}

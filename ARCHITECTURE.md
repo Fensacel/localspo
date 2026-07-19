@@ -1,6 +1,6 @@
 # Architecture
 
-BlueTune menggunakan Clean Architecture.
+bluetune menggunakan Clean Architecture.
 
 ```
 Electron Main Process
@@ -64,7 +64,7 @@ public/
 ## Storage
 
 ```
-BlueTune/
+bluetune/
 
 library.json
 

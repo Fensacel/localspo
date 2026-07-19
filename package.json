@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Premium Desktop Local Music Player",
   "main": "dist-electron/main.js",
-  "author": "BlueTune",
+  "author": "bluetune",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -55,7 +55,7 @@
   },
   "build": {
     "appId": "com.bluetune.app",
-    "productName": "BlueTune",
+    "productName": "bluetune",
     "directories": {
       "output": "release"
     },
@@ -68,4 +68,5 @@
       "allowToChangeInstallationDirectory": true
     }
   }
+  
 }

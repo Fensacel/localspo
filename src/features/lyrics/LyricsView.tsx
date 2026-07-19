@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { usePlayerStore, useSettingsStore } from '@/stores';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { parseLyrics, findCurrentLyricIndex } from '@/services/lyricsParser';
 import type { LyricsData } from '@/types';
-import { Mic2 } from 'lucide-react';
+import { Mic } from 'lucide-react';
 
-export function LyricsPanel() {
-  const { currentSong, currentTime, showLyrics } = usePlayerStore();
+export function LyricsView() {
+  const { currentSong, currentTime } = usePlayerStore();
   const { seekByLyricsEnabled } = useSettingsStore();
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,7 +66,7 @@ export function LyricsPanel() {
     return findCurrentLyricIndex(lyrics.lines, currentTime);
   }, [lyrics, currentTime]);
 
-  // Auto-scroll to current lyric
+  // Auto-scroll to current lyric line
   useEffect(() => {
     if (currentIndex < 0 || !lyrics?.synced) return;
 
@@ -74,64 +74,53 @@ export function LyricsPanel() {
     if (element && containerRef.current) {
       const container = containerRef.current;
       const containerHeight = container.clientHeight;
-      // offsetTop is relative to the container (which has position:relative)
       const elementTop = element.offsetTop;
-      // Place active line at ~38% from top (not exact center, so past lines still visible)
-      const scrollTarget = elementTop - containerHeight * 0.38;
+      
+      // Place active line at ~35% from the top (matches Spotify style)
+      const scrollTarget = elementTop - containerHeight * 0.35;
 
       container.scrollTo({
-        top: Math.max(0, scrollTarget), // never go negative (first lines stay at top)
+        top: Math.max(0, scrollTarget),
         behavior: 'smooth',
       });
     }
   }, [currentIndex, lyrics?.synced]);
 
-  if (!showLyrics) return null;
-
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: 20 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="w-[400px] h-full glass-heavy flex flex-col shrink-0"
-      >
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
-          <Mic2 size={16} className="text-primary" />
-          <span className="text-sm font-semibold text-text/70">Lyrics</span>
-        </div>
-
-        {/* Lyrics content */}
-        <div ref={containerRef} className="flex-1 overflow-y-auto px-5 py-8 relative">
-
+    <div
+      ref={containerRef}
+      className="absolute inset-0 overflow-y-auto select-none scrollbar-none flex flex-col bg-zinc-950"
+    >
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        {/* Lyrics Content Container */}
+        <div className="w-full max-w-4xl mx-auto px-8 md:px-16 pt-[25vh] pb-[45vh] relative z-10">
+          
           {/* Loading state */}
           {isLoading && (
-            <div className="flex flex-col items-center justify-center h-full gap-3">
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
               <div className="flex items-center gap-1.5">
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-primary/60"
+                    className="w-2 h-2 rounded-full bg-white/40"
                     animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.2, 0.8] }}
                     transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
                   />
                 ))}
               </div>
-              <p className="text-xs text-text/30">Searching lyrics...</p>
+              <p className="text-xs text-white/40">Loading lyrics...</p>
             </div>
           )}
 
           {/* Empty state */}
           {!isLoading && !lyrics && (
-            <div className="flex flex-col items-center justify-center h-full text-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center justify-center">
-                <Mic2 size={24} className="text-text/15" />
+            <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-white/[0.04] border border-white/5">
+                <Mic size={28} className="text-white/20" />
               </div>
               <div>
-                <p className="text-sm font-medium text-text/25">No lyrics found</p>
-                <p className="text-xs text-text/15 mt-1">
+                <p className="text-lg font-bold text-white/45">No lyrics available</p>
+                <p className="text-sm mt-1.5 text-white/30">
                   {currentSong ? `${currentSong.artist} — ${currentSong.title}` : ''}
                 </p>
               </div>
@@ -140,10 +129,16 @@ export function LyricsPanel() {
 
           {/* Synced lyrics */}
           {!isLoading && lyrics?.synced && (
-            <div className="space-y-6 pt-6 pb-40">
+            <div className="space-y-7 md:space-y-9">
               {lyrics.lines.map((line, index) => {
                 const isActive = index === currentIndex;
                 const isPast = currentIndex >= 0 && index < currentIndex;
+
+                // Calm monochrome text styling:
+                // Active line is fully opaque white.
+                // Inactive/past lines are faded dark gray (matching Spotify's contrast layout).
+                const textColorClass = isActive ? 'text-white' : 'text-zinc-600';
+                const opacityValue = isActive ? 1 : isPast ? 0.65 : 0.85;
 
                 return (
                   <div
@@ -151,10 +146,12 @@ export function LyricsPanel() {
                     ref={(el) => {
                       if (el) lineRefs.current.set(index, el);
                     }}
-                    className={seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'}
+                    className={`transition-all duration-300 transform origin-left ${
+                      seekByLyricsEnabled ? 'cursor-pointer hover:scale-[1.015]' : 'cursor-default'
+                    }`}
                     onClick={() => {
                       if (!seekByLyricsEnabled) return;
-                      console.log('[LyricsPanel] Lyric clicked. Time:', line.time);
+                      console.log('[LyricsView] Line clicked. Seek to:', line.time);
                       const duration = usePlayerStore.getState().duration;
                       const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
                       usePlayerStore.getState().setCurrentTime(seekTime);
@@ -163,15 +160,16 @@ export function LyricsPanel() {
                   >
                     <motion.p
                       animate={{
-                        fontSize: isActive ? '34px' : '22px',
-                        fontWeight: isActive ? 800 : 600,
-                        opacity: isActive ? 1 : isPast ? 0.22 : 0.38,
-                        color: '#FFFFFF',
+                        opacity: opacityValue,
+                        scale: isActive ? 1.025 : 1.0,
                       }}
-                      transition={{ duration: 0.35, ease: 'easeOut' }}
-                      className="leading-snug"
+                      transition={{ duration: 0.3, ease: 'easeOut' }}
+                      className={`text-2xl md:text-4xl font-extrabold tracking-tight leading-snug ${textColorClass}`}
+                      style={{
+                        textShadow: isActive ? '0 4px 20px rgba(255,255,255,0.08)' : 'none',
+                      }}
                     >
-                      {line.text}
+                      {line.text || '♪'}
                     </motion.p>
                   </div>
                 );
@@ -181,9 +179,12 @@ export function LyricsPanel() {
 
           {/* Plain (unsynced) lyrics */}
           {!isLoading && lyrics && !lyrics.synced && (
-            <div className="space-y-3 py-8">
+            <div className="space-y-4 md:space-y-5 text-center">
               {lyrics.lines.map((line, index) => (
-                <p key={index} className="text-base text-text/60 leading-relaxed text-center">
+                <p
+                  key={index}
+                  className="text-xl md:text-2xl font-bold leading-relaxed text-white/70"
+                >
                   {line.text || <>&nbsp;</>}
                 </p>
               ))}
@@ -191,7 +192,7 @@ export function LyricsPanel() {
           )}
 
         </div>
-      </motion.div>
-    </AnimatePresence>
+      </div>
+    </div>
   );
 }

@@ -7,26 +7,25 @@ import type { LyricLine, LyricsData } from '@/types';
 export function parseLrc(lrcContent: string): LyricsData {
   const lines = lrcContent.split('\n');
   const lyrics: LyricLine[] = [];
-  const timeRegex = /\[(\d{1,3}):(\d{2})(?:\.(\d{2,3}))?\]/g;
+  const timeRegex = /\[(\d{1,3}):(\d{2})(?:[.,](\d+))?\]/g;
 
   for (const line of lines) {
     const matches = [...line.matchAll(timeRegex)];
     if (matches.length === 0) continue;
 
     // Get the text part after all timestamps
-    const text = line.replace(timeRegex, '').trim();
-    if (!text) continue;
+    let text = line.replace(timeRegex, '').trim();
+    if (/^[\s♪♫♬♩♭♮♯]*$/u.test(text)) {
+      text = '';
+    }
 
     for (const match of matches) {
       const minutes = parseInt(match[1], 10);
       const seconds = parseInt(match[2], 10);
-      const centiseconds = match[3]
-        ? match[3].length === 2
-          ? parseInt(match[3], 10) * 10
-          : parseInt(match[3], 10)
-        : 0;
+      const fracStr = match[3] || '0';
+      const fraction = parseFloat('0.' + fracStr);
 
-      const time = minutes * 60 + seconds + centiseconds / 1000;
+      const time = minutes * 60 + seconds + fraction;
       lyrics.push({ time, text });
     }
   }
@@ -56,7 +55,7 @@ export function parsePlainLyrics(text: string): LyricsData {
   const lines = text
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    .filter((line) => line.length > 0 && !/^[\s♪♫♬♩♭♮♯]*$/u.test(line));
 
   return {
     synced: false,
@@ -72,7 +71,7 @@ export function parsePlainLyrics(text: string): LyricsData {
  * Detect if lyrics content is LRC format
  */
 export function isLrcFormat(content: string): boolean {
-  return /\[\d{1,3}:\d{2}(?:\.\d{2,3})?\]/.test(content);
+  return /\[\d{1,3}:\d{2}(?:[.,]\d+)?\]/.test(content);
 }
 
 /**

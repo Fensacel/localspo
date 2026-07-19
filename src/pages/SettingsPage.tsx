@@ -18,6 +18,7 @@ export function SettingsPage() {
     crossfadeDuration,
     visualizer,
     lyricsEnabled,
+    seekByLyricsEnabled,
     updateSettings,
     addMusicFolder,
     removeMusicFolder,
@@ -127,6 +128,12 @@ export function SettingsPage() {
             enabled={lyricsEnabled}
             onChange={(v) => updateSettings({ lyricsEnabled: v })}
           />
+          <ToggleSetting
+            label="Seek by Lyrics"
+            description="Allow clicking on synced lyric lines to jump to that time"
+            enabled={seekByLyricsEnabled}
+            onChange={(v) => updateSettings({ seekByLyricsEnabled: v })}
+          />
           <div className="flex items-center justify-between py-3">
             <div>
               <p className="text-sm font-medium">Visualizer</p>
@@ -149,8 +156,8 @@ export function SettingsPage() {
         {/* About */}
         <div className="glass rounded-2xl p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="w-3 h-3 rounded-full bg-primary glow-blue" />
-            <span className="text-sm font-bold tracking-wider">BlueTune</span>
+            <div className="w-3 h-3 rounded-full bg-primary glow-primary" />
+            <span className="text-sm font-bold tracking-wider">bluetune</span>
           </div>
           <p className="text-xs text-text/30">Version 0.1.0</p>
           <p className="text-xs text-text/20 mt-1">Premium Local Music Player</p>

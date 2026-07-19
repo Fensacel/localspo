@@ -37,7 +37,7 @@ export function ArtistsPage() {
             onClick={() => navigate(`/artists/${artist.id}`)}
             className="flex flex-col items-center gap-3 cursor-pointer group"
           >
-            <div className="w-full aspect-square rounded-full glass overflow-hidden shadow-glass group-hover:glow-blue transition-shadow duration-300">
+            <div className="w-full aspect-square rounded-full glass overflow-hidden shadow-glass group-hover:glow-primary transition-shadow duration-300">
               {artist.coverPath ? (
                 <img
                   src={`local-image://${encodeURIComponent(artist.coverPath)}`}

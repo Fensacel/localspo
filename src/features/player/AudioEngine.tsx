@@ -14,7 +14,6 @@ export function AudioEngine() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
-  const pendingSeekRef = useRef<number | null>(null);
 
   const {
     currentSong,
@@ -22,7 +21,10 @@ export function AudioEngine() {
     volume,
     isMuted,
     playbackSpeed,
+    setCurrentTime,
+    setDuration,
     setIsPlaying,
+    playNext,
   } = usePlayerStore();
 
   // Initialize audio elements
@@ -204,16 +206,7 @@ export function AudioEngine() {
             });
             navigator.mediaSession.playbackState = 'playing';
           }
-        } catch (error: any) {
-          // If the song has changed since we initiated playback, do not revert isPlaying
-          if (lastSongIdRef.current !== currentSong.id) {
-            console.log('[AudioEngine Sync] Play promise rejected but current song has changed. Ignoring.');
-            return;
-          }
-          if (error && error.name === 'AbortError') {
-            console.log('[AudioEngine Sync] Play promise aborted (AbortError). Ignoring.');
-            return;
-          }
+        } catch (error) {
           console.error(error);
           console.error(`[AudioEngine Sync] audio.play() call failed:`, error);
           // Revert store state so play button doesn't get stuck in loading/playing state
@@ -249,18 +242,7 @@ export function AudioEngine() {
       console.log("Audio Current:", audio.currentTime);
       if (audio.duration && isFinite(audio.duration)) {
         console.log(`[AudioEngine Event] Setting duration in store: ${audio.duration}`);
-        usePlayerStore.getState().setDuration(audio.duration);
-      }
-
-      if (pendingSeekRef.current !== null) {
-        const pendingSeek = pendingSeekRef.current;
-        pendingSeekRef.current = null;
-        try {
-          audio.currentTime = pendingSeek;
-          usePlayerStore.getState().setCurrentTime(pendingSeek);
-        } catch (error) {
-          console.error('[AudioEngine Event] Failed applying pending seek after metadata load:', error);
-        }
+        setDuration(audio.duration);
       }
     };
 
@@ -270,28 +252,25 @@ export function AudioEngine() {
 
     const handlePlay = () => {
       logEvent('play');
-      const isPlaying = usePlayerStore.getState().isPlaying;
       if (!isPlaying) {
         console.log('[AudioEngine Event] play event fired by audio element. Syncing store: isPlaying = true');
-        usePlayerStore.getState().setIsPlaying(true);
+        setIsPlaying(true);
       }
     };
 
     const handlePlaying = () => {
       logEvent('playing');
-      const isPlaying = usePlayerStore.getState().isPlaying;
       if (!isPlaying) {
         console.log('[AudioEngine Event] playing event fired by audio element. Syncing store: isPlaying = true');
-        usePlayerStore.getState().setIsPlaying(true);
+        setIsPlaying(true);
       }
     };
 
     const handlePause = () => {
       logEvent('pause');
-      const isPlaying = usePlayerStore.getState().isPlaying;
       if (isPlaying) {
         console.log('[AudioEngine Event] pause event fired by audio element. Syncing store: isPlaying = false');
-        usePlayerStore.getState().setIsPlaying(false);
+        setIsPlaying(false);
       }
     };
 
@@ -301,26 +280,37 @@ export function AudioEngine() {
       if (isStoreSeeking || audio.seeking) {
         return;
       }
-      usePlayerStore.getState().setCurrentTime(audio.currentTime);
+      setCurrentTime(audio.currentTime);
     };
 
     const handleSeeking = () => {
       console.log("Seek Start");
       console.log("Seek To:", audio.currentTime);
-      console.log(audio.currentTime);
     };
 
     const handleSeeked = () => {
       console.log("Audio Current:", audio.currentTime);
       console.log("Seek End");
+      setCurrentTime(audio.currentTime);
+      usePlayerStore.getState().setIsSeeking(false);
     };
 
     const handleEnded = () => {
       logEvent('ended');
       console.log("Audio Current:", audio.currentTime);
-      console.log("ENDED");
+      
+      // Prevent premature ended events from skipping the song (e.g. during seek or loading glitches)
+      if (audio.seeking) {
+        console.log('[AudioEngine Event] ended event ignored because audio is seeking.');
+        return;
+      }
+      if (audio.duration > 0 && audio.currentTime < audio.duration - 1.5) {
+        console.log('[AudioEngine Event] ended event ignored because current time is far from duration.');
+        return;
+      }
+
       console.log('[AudioEngine Event] Song ended. Triggering playNext...');
-      usePlayerStore.getState().playNext();
+      playNext();
     };
 
     const handleError = () => {
@@ -330,7 +320,7 @@ export function AudioEngine() {
         message: err?.message,
         src: audio.src,
       });
-      usePlayerStore.getState().setIsPlaying(false);
+      setIsPlaying(false);
     };
 
     const handleWaiting = () => {
@@ -382,7 +372,7 @@ export function AudioEngine() {
       audio.removeEventListener('loadstart', handleLoadStart);
       audio.removeEventListener('emptied', handleEmptied);
     };
-  }, []);
+  }, [isPlaying, setIsPlaying, setCurrentTime, setDuration, playNext]);
 
   // Volume control
   useEffect(() => {
@@ -427,13 +417,12 @@ export function AudioEngine() {
       if (!audio) return;
       const time = (e as CustomEvent).detail;
       console.log(`[AudioEngine CustomEvent] player:seek event received. Seeking to: ${time.toFixed(2)}`);
-      usePlayerStore.getState().setCurrentTime(time);
-
+      usePlayerStore.getState().setIsSeeking(true);
       if (audio.duration > 0 && audio.readyState >= 1) {
         audio.currentTime = time;
       } else {
-        pendingSeekRef.current = time;
-        console.warn(`[AudioEngine CustomEvent] Seek deferred until metadata is ready. duration: ${audio.duration}, readyState: ${audio.readyState}`);
+        console.warn(`[AudioEngine CustomEvent] Seek ignored. duration: ${audio.duration}, readyState: ${audio.readyState}`);
+        usePlayerStore.getState().setIsSeeking(false);
       }
     };
 
@@ -491,26 +480,17 @@ export function AudioEngine() {
           if (e.ctrlKey) {
             usePlayerStore.getState().playNext();
           } else if (audioRef.current && audioRef.current.duration > 0 && audioRef.current.readyState >= 1) {
-            const nextTime = Math.min(audioRef.current.currentTime + 5, audioRef.current.duration);
-            audioRef.current.currentTime = nextTime;
-            usePlayerStore.getState().setCurrentTime(nextTime);
-          } else if (audioRef.current) {
-            const nextTime = Math.min(audioRef.current.currentTime + 5, audioRef.current.duration || Number.POSITIVE_INFINITY);
-            pendingSeekRef.current = nextTime;
-            usePlayerStore.getState().setCurrentTime(nextTime);
+            audioRef.current.currentTime = Math.min(
+              audioRef.current.currentTime + 5,
+              audioRef.current.duration,
+            );
           }
           break;
         case 'ArrowLeft':
           if (e.ctrlKey) {
             usePlayerStore.getState().playPrevious();
           } else if (audioRef.current && audioRef.current.duration > 0 && audioRef.current.readyState >= 1) {
-            const nextTime = Math.max(audioRef.current.currentTime - 5, 0);
-            audioRef.current.currentTime = nextTime;
-            usePlayerStore.getState().setCurrentTime(nextTime);
-          } else if (audioRef.current) {
-            const nextTime = Math.max(audioRef.current.currentTime - 5, 0);
-            pendingSeekRef.current = nextTime;
-            usePlayerStore.getState().setCurrentTime(nextTime);
+            audioRef.current.currentTime = Math.max(audioRef.current.currentTime - 5, 0);
           }
           break;
         case 'ArrowUp':

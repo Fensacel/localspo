@@ -1,6 +1,6 @@
-# BlueTune
+# bluetune
 
-BlueTune adalah aplikasi desktop premium untuk memutar koleksi musik lokal.
+bluetune adalah aplikasi desktop premium untuk memutar koleksi musik lokal.
 
 ## Features
 

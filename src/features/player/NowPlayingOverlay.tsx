@@ -1,23 +1,115 @@
 import { useEffect, useRef, useState } from 'react';
-import { usePlayerStore, useFavoritesStore } from '@/stores';
+import { usePlayerStore, useFavoritesStore, useSettingsStore } from '@/stores';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Minimize2,
+  ChevronDown,
   Heart,
   Volume2,
+  VolumeX,
   Mic2,
   Play,
   Pause,
   SkipBack,
   SkipForward,
-  MoreHorizontal,
+  Shuffle,
+  Repeat,
+  Repeat1,
 } from 'lucide-react';
-import {
-  formatFileSize,
-} from '@/utils';
 import { parseLyrics, findCurrentLyricIndex } from '@/services/lyricsParser';
+import { formatTime, getImageUrl } from '@/utils';
 import type { LyricsData } from '@/types';
 
+// ─── Color extraction via canvas ────────────────────────
+function extractColors(src: string): Promise<[[number, number, number], [number, number, number]]> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 8;
+        canvas.height = 8;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('no ctx');
+        ctx.drawImage(img, 0, 0, 8, 8);
+
+        // Sample two quadrants
+        const sample = (x: number, y: number, w: number, h: number): [number, number, number] => {
+          const d = ctx.getImageData(x, y, w, h).data;
+          let r = 0, g = 0, b = 0, n = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            const lum = (d[i] + d[i + 1] + d[i + 2]) / 3;
+            if (lum > 20 && lum < 240) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+          }
+          return n > 0 ? [Math.round(r / n), Math.round(g / n), Math.round(b / n)] : [40, 40, 80];
+        };
+
+        const c1 = sample(0, 0, 4, 8);   // left half
+        const c2 = sample(4, 0, 4, 8);   // right half
+        resolve([c1, c2]);
+      } catch {
+        resolve([[40, 40, 80], [80, 40, 120]]);
+      }
+    };
+    img.onerror = () => resolve([[40, 40, 80], [80, 40, 120]]);
+    img.src = src;
+  });
+}
+
+// ─── Slider Component ────────────────────────────────────
+interface SliderProps {
+  value: number;       // 0–1
+  onChange: (v: number) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  thin?: boolean;
+}
+function Slider({ value, onChange, onDragStart, onDragEnd, thin = false }: SliderProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  const applyValue = (clientX: number) => {
+    if (!trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    onChange(pct);
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    if (onDragStart) onDragStart();
+    applyValue(e.clientX);
+    const onMove = (ev: PointerEvent) => applyValue(ev.clientX);
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (onDragEnd) onDragEnd();
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const h = thin ? 'h-[3px]' : 'h-[4px]';
+
+  return (
+    <div
+      ref={trackRef}
+      onPointerDown={handlePointerDown}
+      className={`relative ${h} rounded-full bg-white/15 cursor-pointer group w-full`}
+    >
+      <div
+        className={`absolute left-0 top-0 ${h} rounded-full bg-white/80 transition-none`}
+        style={{ width: `${value * 100}%` }}
+      />
+      <div
+        className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-lg
+                   opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+        style={{ left: `calc(${value * 100}% - 7px)` }}
+      />
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────
 export function NowPlayingOverlay() {
   const {
     currentSong,
@@ -25,543 +117,421 @@ export function NowPlayingOverlay() {
     currentTime,
     duration,
     volume,
+    isMuted,
+    repeatMode,
+    shuffleMode,
     showNowPlaying,
     setShowNowPlaying,
     setIsPlaying,
     setVolume,
+    toggleRepeat,
+    toggleShuffle,
+    toggleMute,
   } = usePlayerStore();
 
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
+  const { seekByLyricsEnabled } = useSettingsStore();
 
-  const [visualizerType, setVisualizerType] = useState<
-    'spectrum' | 'waveform' | 'circular' | 'particle'
-  >('circular');
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
+  const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [localTime, setLocalTime] = useState(0);
+  const [bgColors, setBgColors] = useState<[[number,number,number],[number,number,number]]>(
+    [[20, 20, 40], [60, 20, 100]],
+  );
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const lyricLineRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const volumeRef = useRef<HTMLDivElement>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
 
-  // Load lyrics
+  // ── Extract album colors ──────────────────────────────
   useEffect(() => {
-    if (!currentSong) return;
+    if (!currentSong?.coverPath) {
+      setBgColors([[20, 20, 40], [60, 20, 100]]);
+      return;
+    }
+    extractColors(getImageUrl(currentSong.coverPath))
+      .then(setBgColors)
+      .catch(() => setBgColors([[20, 20, 40], [60, 20, 100]]));
+  }, [currentSong?.coverPath]);
+
+  // ── Load lyrics ───────────────────────────────────────
+  useEffect(() => {
+    if (!currentSong) { setLyrics(null); return; }
+    let cancelled = false;
+    lyricLineRefs.current.clear();
+    setIsLoadingLyrics(true);
+    setLyrics(null);
 
     window.electronAPI.lyrics
-      .read(currentSong.id, currentSong.path, currentSong.lrcPath, currentSong.hasEmbeddedLyrics)
+      .read(
+        currentSong.id,
+        currentSong.path,
+        currentSong.lrcPath,
+        currentSong.hasEmbeddedLyrics,
+        currentSong.artist,
+        currentSong.title,
+        currentSong.album,
+        currentSong.duration,
+      )
       .then((res: { source: string; content: string } | null) => {
-        if (res) {
-          setLyrics(parseLyrics(res.content));
-        } else {
-          setLyrics(null);
-        }
+        if (cancelled) return;
+        setLyrics(res ? parseLyrics(res.content) : null);
       })
-      .catch(() => setLyrics(null));
-  }, [currentSong]);
+      .catch(() => { if (!cancelled) setLyrics(null); })
+      .finally(() => { if (!cancelled) setIsLoadingLyrics(false); });
 
-  // Sync lyrics scroll
-  const currentLyricIndex = lyrics?.synced ? findCurrentLyricIndex(lyrics.lines, currentTime) : -1;
-  useEffect(() => {
-    if (currentLyricIndex < 0 || !lyrics?.synced) return;
-    const element = lyricLineRefs.current.get(currentLyricIndex);
-    if (element && lyricsContainerRef.current) {
-      const container = lyricsContainerRef.current;
-      const scrollTarget =
-        element.offsetTop - container.clientHeight / 2 + element.clientHeight / 2;
-      container.scrollTo({ top: scrollTarget, behavior: 'smooth' });
-    }
-  }, [currentLyricIndex, lyrics?.synced]);
+    return () => { cancelled = true; };
+  }, [currentSong?.id]);
 
+  // ── Sync time ─────────────────────────────────────────
   useEffect(() => {
-    if (!isSeeking) {
-      setLocalTime(currentTime);
-    }
+    if (!isSeeking) setLocalTime(currentTime);
   }, [currentTime, isSeeking]);
 
-  const handleProgressPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!progressRef.current || !duration) return;
-    setIsSeeking(true);
+  // ── Current lyric index ───────────────────────────────
+  const currentLyricIndex = lyrics?.synced
+    ? findCurrentLyricIndex(lyrics.lines, currentTime)
+    : -1;
 
-    const applySeek = (clientX: number) => {
-      if (!progressRef.current) return;
-      const rect = progressRef.current.getBoundingClientRect();
-      const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      const seekTime = percent * duration;
-      setLocalTime(seekTime);
-      window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
-    };
-
-    applySeek(e.clientX);
-    e.currentTarget.setPointerCapture(e.pointerId);
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      applySeek(moveEvent.clientX);
-    };
-
-    const handlePointerUp = () => {
-      setIsSeeking(false);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-  };
-
-  const handleVolumePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!volumeRef.current) return;
-
-    const updateVolumeFromEvent = (clientX: number) => {
-      if (!volumeRef.current) return;
-      const rect = volumeRef.current.getBoundingClientRect();
-      const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      setVolume(percent);
-      window.dispatchEvent(new CustomEvent('player:volume', { detail: percent }));
-    };
-
-    updateVolumeFromEvent(e.clientX);
-    e.currentTarget.setPointerCapture(e.pointerId);
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      updateVolumeFromEvent(moveEvent.clientX);
-    };
-
-    const handlePointerUp = () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-  };
-
-  // Visualizer loop
+  // ── Auto-scroll lyrics ────────────────────────────────
   useEffect(() => {
-    if (!showNowPlaying) return;
+    if (currentLyricIndex < 0 || !lyrics?.synced) return;
+    const el = lyricLineRefs.current.get(currentLyricIndex);
+    const container = lyricsContainerRef.current;
+    if (!el || !container) return;
+    const target = el.offsetTop - container.clientHeight * 0.38;
+    container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+  }, [currentLyricIndex, lyrics?.synced]);
 
-    let animationFrameId: number;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // ── Progress seek ─────────────────────────────────────
+  const handleSeek = (pct: number) => {
+    const t = pct * duration;
+    setLocalTime(t);
+    window.dispatchEvent(new CustomEvent('player:seek', { detail: t }));
+  };
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const resizeCanvas = () => {
-      canvas.width = canvas.parentElement?.clientWidth || 800;
-      canvas.height = canvas.parentElement?.clientHeight || 500;
-    };
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-
-    // Particle system state
-    const particles: Array<{
-      x: number;
-      y: number;
-      size: number;
-      speedY: number;
-      speedX: number;
-      alpha: number;
-    }> = [];
-    for (let i = 0; i < 60; i++) {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        size: Math.random() * 3 + 1,
-        speedY: -(Math.random() * 1 + 0.5),
-        speedX: (Math.random() - 0.5) * 0.5,
-        alpha: Math.random() * 0.5 + 0.1,
-      });
-    }
-
-    const draw = () => {
-      animationFrameId = requestAnimationFrame(draw);
-
-      const analyser = window.__bluetune_analyser;
-      if (!analyser) {
-        // Draw empty visualizer if not playing
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        return;
-      }
-
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-
-      if (visualizerType === 'waveform') {
-        analyser.getByteTimeDomainData(dataArray);
-      } else {
-        analyser.getByteFrequencyData(dataArray);
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Bass energy for audio-reactive motion
-      let bassSum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        if (i < 10) bassSum += dataArray[i]; // Low frequencies
-      }
-      const bassEnergy = bassSum / 10;
-      const bassRatio = bassEnergy / 255;
-
-      // Draw active visualizer
-      if (visualizerType === 'spectrum') {
-        const barWidth = (canvas.width / bufferLength) * 2.5;
-        let x = 0;
-
-        for (let i = 0; i < bufferLength; i++) {
-          const barHeight = (dataArray[i] / 255) * canvas.height * 0.7;
-
-          // Glowing blue-neon gradient
-          const grad = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
-          grad.addColorStop(0, 'rgba(59, 130, 246, 0.1)');
-          grad.addColorStop(0.5, 'rgba(96, 165, 250, 0.5)');
-          grad.addColorStop(1, 'rgba(147, 197, 253, 0.8)');
-
-          ctx.fillStyle = grad;
-          ctx.fillRect(x, canvas.height - barHeight, barWidth - 2, barHeight);
-
-          x += barWidth;
-        }
-      } else if (visualizerType === 'waveform') {
-        ctx.lineWidth = 3;
-        // Neon blue stroke
-        ctx.strokeStyle = 'rgba(96, 165, 250, 0.8)';
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#3B82F6';
-        ctx.beginPath();
-
-        const sliceWidth = canvas.width / bufferLength;
-        let x = 0;
-
-        for (let i = 0; i < bufferLength; i++) {
-          const v = dataArray[i] / 128.0;
-          const y = (v * canvas.height) / 2;
-
-          if (i === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
-
-          x += sliceWidth;
-        }
-
-        ctx.lineTo(canvas.width, canvas.height / 2);
-        ctx.stroke();
-        ctx.shadowBlur = 0; // Reset
-      } else if (visualizerType === 'circular') {
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const baseRadius = Math.min(canvas.width, canvas.height) * 0.22 + bassRatio * 20;
-
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = 'rgba(59, 130, 246, 0.6)';
-
-        // Draw outer glowing ring
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, baseRadius, 0, 2 * Math.PI);
-        ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
-        ctx.lineWidth = 10;
-        ctx.stroke();
-
-        // Draw reactive bars outward
-        const numBars = 120;
-        for (let i = 0; i < numBars; i++) {
-          const angle = (i / numBars) * Math.PI * 2;
-          const dataIndex = Math.floor((i / numBars) * bufferLength * 0.6);
-          const value = dataArray[dataIndex] || 0;
-          const barLen = (value / 255) * 80;
-
-          const startX = centerX + Math.cos(angle) * baseRadius;
-          const startY = centerY + Math.sin(angle) * baseRadius;
-          const endX = centerX + Math.cos(angle) * (baseRadius + barLen);
-          const endY = centerY + Math.sin(angle) * (baseRadius + barLen);
-
-          const grad = ctx.createLinearGradient(startX, startY, endX, endY);
-          grad.addColorStop(0, 'rgba(59, 130, 246, 0.8)');
-          grad.addColorStop(1, 'rgba(147, 197, 253, 0.2)');
-
-          ctx.beginPath();
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(endX, endY);
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = 3;
-          ctx.stroke();
-        }
-
-        ctx.shadowBlur = 0;
-      } else if (visualizerType === 'particle') {
-        // Draw connection lines for close particles
-        ctx.strokeStyle = 'rgba(59, 130, 246, 0.05)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < particles.length; i++) {
-          for (let j = i + 1; j < particles.length; j++) {
-            const dist = Math.hypot(
-              particles[i].x - particles[j].x,
-              particles[i].y - particles[j].y,
-            );
-            if (dist < 100) {
-              ctx.beginPath();
-              ctx.moveTo(particles[i].x, particles[i].y);
-              ctx.lineTo(particles[j].x, particles[j].y);
-              ctx.stroke();
-            }
-          }
-        }
-
-        // Draw and update particles reactively
-        particles.forEach((p) => {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * (1 + bassRatio * 1.5), 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(96, 165, 250, ${p.alpha * (1 + bassRatio)})`;
-          ctx.shadowBlur = bassRatio * 15;
-          ctx.shadowColor = '#3B82F6';
-          ctx.fill();
-
-          // Move
-          p.y += p.speedY * (1 + bassRatio * 3);
-          p.x += p.speedX;
-
-          // Wrap around edges
-          if (p.y < 0) {
-            p.y = canvas.height;
-            p.x = Math.random() * canvas.width;
-          }
-          if (p.x < 0 || p.x > canvas.width) {
-            p.x = Math.random() * canvas.width;
-          }
-        });
-        ctx.shadowBlur = 0;
-      }
-    };
-
-    draw();
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', resizeCanvas);
-    };
-  }, [showNowPlaying, visualizerType]);
+  const handleVolumeChange = (pct: number) => {
+    setVolume(pct);
+    window.dispatchEvent(new CustomEvent('player:volume', { detail: pct }));
+  };
 
   if (!showNowPlaying || !currentSong) return null;
 
-  const coverSrc = currentSong.coverPath
-    ? `local-image://${encodeURIComponent(currentSong.coverPath)}`
-    : '/default-cover.png';
-
+  const coverSrc = currentSong.coverPath ? getImageUrl(currentSong.coverPath) : '';
   const isFav = isFavoriteSong(currentSong.id);
+  const progressPct = duration > 0 ? localTime / duration : 0;
+  const effectiveVolume = isMuted ? 0 : volume;
+  const [c1, c2] = bgColors;
 
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ y: '100%', opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: '100%', opacity: 0 }}
-        transition={{ type: 'spring', damping: 26, stiffness: 170 }}
-        className="fixed inset-0 z-[100] bg-bg flex flex-col overflow-hidden p-6 select-none"
+        key="nowplaying-root"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.45, ease: 'easeInOut' }}
+        className="fixed inset-0 z-[100] overflow-hidden select-none flex flex-col bg-[#0a0a0c]"
+        style={{ fontFamily: "'Inter', -apple-system, sans-serif" }}
       >
-        {/* Blurred album backdrop */}
-        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-          <img
-            src={coverSrc}
-            alt=""
-            className="w-full h-full object-cover opacity-15 blur-[120px] scale-125"
-          />
-        </div>
 
-        {/* Titlebar header inside fullscreen overlay */}
-        <div className="relative z-10 flex items-center justify-between shrink-0 h-12 mb-6">
+        {/* ════ Dynamic Background ════ */}
+        <AnimatePresence>
+          <motion.div
+            key={`bg-${currentSong.id}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.9, ease: 'easeInOut' }}
+            className="absolute inset-0 z-0"
+          >
+            {/* Blurred art */}
+            {coverSrc && (
+              <img
+                src={coverSrc}
+                alt=""
+                draggable={false}
+                className="absolute inset-0 w-full h-full object-cover scale-[1.3]"
+                style={{ filter: 'blur(80px) saturate(200%) brightness(0.45)' }}
+              />
+            )}
+            {/* Dark base */}
+            <div className="absolute inset-0 bg-black/50" />
+            {/* Color blobs */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `
+                  radial-gradient(ellipse 70% 80% at 15% 60%, rgba(${c1.join(',')},0.45) 0%, transparent 70%),
+                  radial-gradient(ellipse 60% 70% at 85% 40%, rgba(${c2.join(',')},0.38) 0%, transparent 70%)
+                `,
+              }}
+            />
+            {/* Vignette */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20" />
+          </motion.div>
+        </AnimatePresence>
+
+        {/* ════ Top Bar ════ */}
+        <div className="relative z-10 flex items-center justify-between px-10 pt-7 pb-2 shrink-0">
           <button
             onClick={() => setShowNowPlaying(false)}
-            className="flex items-center gap-2 text-text/50 hover:text-text transition-colors text-sm font-medium"
+            className="flex items-center gap-2 text-white/50 hover:text-white/90 transition-all duration-200 text-sm font-medium group"
           >
-            <Minimize2 size={16} />
-            Back to Library
+            <motion.div whileHover={{ y: 2 }}>
+              <ChevronDown size={18} />
+            </motion.div>
+            <span>Now Playing</span>
           </button>
-          <div className="w-24" /> {/* Spacer */}
+
+          <button
+            onClick={() => isFavoriteSong(currentSong.id)
+              ? toggleFavoriteSong(currentSong.id)
+              : toggleFavoriteSong(currentSong.id)
+            }
+            className="transition-all duration-200"
+          >
+            <motion.div
+              whileTap={{ scale: 0.85 }}
+              className={isFav ? 'text-red-400' : 'text-white/35 hover:text-white/60'}
+            >
+              <Heart size={20} fill={isFav ? 'currentColor' : 'none'} />
+            </motion.div>
+          </button>
         </div>
 
-        {/* Main interactive grid */}
-        <div className="relative z-10 flex-1 grid grid-cols-12 gap-8 min-h-0">
-          {/* Left panel: Album and Metadata */}
-          <div className="col-span-4 flex flex-col justify-center items-center min-w-0">
-            <div className="relative w-72 h-72 xl:w-[360px] xl:h-[360px] mb-6 shrink-0">
-              <div className="w-full h-full rounded-3xl overflow-hidden shadow-glow-xl border border-white/10">
-                <img src={coverSrc} alt={currentSong.album} className="w-full h-full object-cover" />
-              </div>
-            </div>
+        {/* ════ Main Grid ════ */}
+        <div className="relative z-10 flex-1 flex min-h-0 px-10 pb-10 pt-2 gap-16">
 
-            <div className="flex items-center justify-center gap-3 mb-5">
-              <button
-                onClick={() => usePlayerStore.getState().playPrevious()}
-                className="w-11 h-11 rounded-full bg-white/5 border border-white/10 text-text/80 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
+          {/* ── Left Panel (35%) ── */}
+          <div className="w-[35%] flex flex-col justify-center items-center gap-7 shrink-0">
+
+            {/* Album Artwork */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`art-${currentSong.id}`}
+                initial={{ opacity: 0, scale: 0.88, y: 24 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.88, y: -24 }}
+                transition={{ type: 'spring', stiffness: 240, damping: 28 }}
+                className="relative w-full max-w-[440px] aspect-square"
               >
-                <SkipBack size={18} fill="currentColor" />
-              </button>
-              <button
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center shadow-glow hover:scale-105 active:scale-95 transition-all duration-200"
-              >
-                {isPlaying ? (
-                  <Pause size={24} fill="currentColor" />
+                {coverSrc ? (
+                  <img
+                    src={coverSrc}
+                    alt={currentSong.album}
+                    draggable={false}
+                    className="w-full h-full object-cover"
+                    style={{
+                      borderRadius: '20px',
+                      boxShadow: '0 40px 100px rgba(0,0,0,0.65), 0 8px 24px rgba(0,0,0,0.4)',
+                    }}
+                  />
                 ) : (
-                  <Play size={24} fill="currentColor" className="ml-1" />
+                  <div
+                    className="w-full h-full flex items-center justify-center bg-white/[0.04]"
+                    style={{ borderRadius: '20px' }}
+                  >
+                    <Mic2 size={72} className="text-white/15" />
+                  </div>
                 )}
-              </button>
-              <button
+              </motion.div>
+            </AnimatePresence>
+
+            {/* Song Info */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`info-${currentSong.id}`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.35 }}
+                className="w-full text-center space-y-1"
+              >
+                <h1 className="text-[22px] font-bold text-white leading-tight truncate px-2">
+                  {currentSong.title}
+                </h1>
+                <p className="text-white/55 text-base truncate px-2">{currentSong.artist}</p>
+                {currentSong.album && (
+                  <p className="text-white/30 text-sm truncate px-2">{currentSong.album}</p>
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            {/* Progress */}
+            <div className="w-full space-y-2">
+              <Slider
+                value={progressPct}
+                onChange={handleSeek}
+                onDragStart={() => setIsSeeking(true)}
+                onDragEnd={() => setIsSeeking(false)}
+              />
+              <div className="flex justify-between text-[11px] text-white/35 font-medium tabular-nums">
+                <span>{formatTime(localTime)}</span>
+                <span>-{formatTime(Math.max(0, duration - localTime))}</span>
+              </div>
+            </div>
+
+            {/* Playback Controls */}
+            <div className="flex items-center justify-center gap-7">
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={() => toggleShuffle()}
+                className={`transition-all duration-200 ${
+                  shuffleMode === 'on' ? 'text-white' : 'text-white/25 hover:text-white/55'
+                }`}
+              >
+                <Shuffle size={19} />
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={() => usePlayerStore.getState().playPrevious()}
+                className="text-white/75 hover:text-white transition-colors"
+              >
+                <SkipBack size={30} />
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  setIsPlaying(!isPlaying);
+                  window.dispatchEvent(new CustomEvent('player:toggle'));
+                }}
+                className="w-[62px] h-[62px] rounded-full bg-white flex items-center justify-center
+                           shadow-2xl hover:bg-white/90 transition-all duration-200"
+              >
+                {isPlaying
+                  ? <Pause size={26} fill="#000" className="text-black" />
+                  : <Play size={26} fill="#000" className="text-black ml-1" />
+                }
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.88 }}
                 onClick={() => usePlayerStore.getState().playNext()}
-                className="w-11 h-11 rounded-full bg-white/5 border border-white/10 text-text/80 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
+                className="text-white/75 hover:text-white transition-colors"
               >
-                <SkipForward size={18} fill="currentColor" />
+                <SkipForward size={30} />
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                onClick={() => toggleRepeat()}
+                className={`transition-all duration-200 ${
+                  repeatMode !== 'off' ? 'text-white' : 'text-white/25 hover:text-white/55'
+                }`}
+              >
+                {repeatMode === 'one' ? <Repeat1 size={19} /> : <Repeat size={19} />}
+              </motion.button>
+            </div>
+
+            {/* Volume */}
+            <div className="flex items-center gap-3 w-full">
+              <button
+                onClick={() => toggleMute()}
+                className="text-white/35 hover:text-white/65 transition-colors shrink-0"
+              >
+                {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
               </button>
+              <Slider value={effectiveVolume} onChange={handleVolumeChange} thin />
             </div>
 
-            <div className="group w-full max-w-sm px-4 mb-4">
-              <div
-                ref={progressRef}
-                onPointerDown={handleProgressPointerDown}
-                className="relative h-1.5 rounded-full bg-white/10 cursor-pointer"
-              >
-                <div
-                  className="absolute left-0 top-0 h-full rounded-full bg-primary"
-                  style={{ width: `${duration > 0 ? (localTime / duration) * 100 : 0}%` }}
-                />
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary shadow-glow"
-                  style={{ left: `calc(${duration > 0 ? (localTime / duration) * 100 : 0}% - 6px)` }}
-                />
-              </div>
-            </div>
-
-            <div className="w-full max-w-sm px-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-2xl font-bold truncate text-glow-blue">{currentSong.title}</h2>
-                  <p className="text-text/50 text-sm truncate mt-1">{currentSong.artist}</p>
-                  <p className="text-text/30 text-xs truncate mt-0.5">{currentSong.album}</p>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0 pt-1">
-                  <button
-                    onClick={() => toggleFavoriteSong(currentSong.id)}
-                    className={`w-10 h-10 rounded-full border transition-all flex items-center justify-center hover:scale-105 active:scale-95 ${
-                      isFav
-                        ? 'bg-primary/90 border-white/10 text-white'
-                        : 'bg-white/5 border-white/10 text-text/70 hover:text-white hover:bg-white/10'
-                    }`}
-                    aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                  >
-                    <Heart size={16} fill={isFav ? 'currentColor' : 'none'} />
-                  </button>
-
-                  <button
-                    className="w-10 h-10 rounded-full bg-white/5 border border-white/10 text-text/70 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center hover:scale-105 active:scale-95"
-                    aria-label="More options"
-                  >
-                    <MoreHorizontal size={16} />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="group mt-8 flex items-center gap-3 w-full max-w-sm px-4">
-              <Volume2 size={14} className="text-text/50 shrink-0" />
-              <div
-                ref={volumeRef}
-                onPointerDown={handleVolumePointerDown}
-                className="relative flex-1 h-1 bg-white/10 rounded-full cursor-pointer"
-              >
-                <div
-                  className="absolute left-0 top-0 h-full bg-primary rounded-full"
-                  style={{ width: `${volume * 100}%` }}
-                />
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-glow"
-                  style={{ left: `calc(${volume * 100}% - 6px)` }}
-                />
-              </div>
-            </div>
           </div>
 
-          {/* Middle panel: Visualizer Canvas */}
-          <div className="col-span-4 relative flex items-center justify-center overflow-hidden">
-            <canvas ref={canvasRef} className="w-full h-full object-contain pointer-events-none" />
-          </div>
+          {/* ── Right Panel (65%) — Lyrics ── */}
+          <div className="flex-1 flex flex-col min-h-0 justify-center relative">
 
-          {/* Right panel: Full lyrics */}
-          <div className="col-span-4 flex flex-col min-h-0">
+
             <div
               ref={lyricsContainerRef}
-              className="flex-1 overflow-y-auto px-2 relative py-8"
+              className="flex-1 overflow-y-auto overflow-x-hidden relative"
+              style={{
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+              }}
             >
-              {lyrics ? (
-                lyrics.synced ? (
-                  <div className="space-y-4 py-24">
-                    {lyrics.lines.map((line, idx) => {
-                      const isActive = idx === currentLyricIndex;
-                      const isPast = currentLyricIndex >= 0 && idx < currentLyricIndex;
-                      return (
-                        <div
-                          key={idx}
-                          ref={(el) => {
-                            if (el) lyricLineRefs.current.set(idx, el);
-                          }}
-                          onClick={() => {
-                            window.dispatchEvent(
-                              new CustomEvent('player:seek', { detail: line.time }),
-                            );
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <motion.p
-                            animate={{
-                              fontSize: isActive ? '28px' : '18px',
-                              fontWeight: isActive ? 700 : 600,
-                              opacity: isActive ? 1 : isPast ? 0.35 : 0.45,
-                              color: isActive ? '#3B82F6' : '#94A3B8',
-                            }}
-                            transition={{ duration: 0.25 }}
-                            className={`leading-relaxed text-center ${
-                              isActive ? 'text-glow-blue font-bold' : ''
-                            }`}
-                          >
-                            {line.text}
-                          </motion.p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="space-y-4 text-center py-4">
-                    {lyrics.lines.map((line, idx) => (
-                      <p key={idx} className="text-sm text-text/60 leading-relaxed">
-                        {line.text}
-                      </p>
+
+              {/* Loading */}
+              {isLoadingLyrics && (
+                <div className="flex flex-col items-center justify-center h-full gap-4 pt-8">
+                  <div className="flex items-center gap-2">
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        className="w-2 h-2 rounded-full bg-white/40"
+                        animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.3, 0.8] }}
+                        transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.22 }}
+                      />
                     ))}
                   </div>
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <Mic2 size={32} className="text-text/10 mb-2" />
-                  <span className="text-xs text-text/30">No lyrics available</span>
+                  <p className="text-white/25 text-sm tracking-wide">Searching lyrics...</p>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
 
-        {/* Footer specs */}
-        <div className="relative z-10 flex items-center justify-between shrink-0 h-10 pt-4 text-[10px] text-text/35 font-mono">
-          <div className="flex gap-4">
-            <span>
-              Size: <span className="text-text/60">{formatFileSize(currentSong.fileSize)}</span>
-            </span>
+              {/* Synced lyrics */}
+              {!isLoadingLyrics && lyrics?.synced && (
+                <div className="pt-8 pb-[55vh] pl-2 pr-8 space-y-5">
+                  {lyrics.lines.map((line, idx) => {
+                    const isActive = idx === currentLyricIndex;
+                    const isPast = currentLyricIndex >= 0 && idx < currentLyricIndex;
+
+                    return (
+                      <div
+                        key={idx}
+                        ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
+                        onClick={() => {
+                          if (!seekByLyricsEnabled) return;
+                          console.log('[NowPlayingOverlay] Lyric clicked:', line.text, 'Seek to:', line.time);
+                          const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
+                          usePlayerStore.getState().setCurrentTime(seekTime);
+                          window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                        }}
+                        className={`${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
+                      >
+                        <motion.p
+                          animate={{
+                            fontSize: isActive ? '44px' : '28px',
+                            fontWeight: isActive ? 700 : 500,
+                            opacity: isActive ? 1 : isPast ? 0.22 : 0.38,
+                            color: '#ffffff',
+                          }}
+                          transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+                          style={{ lineHeight: 1.2 }}
+                        >
+                          {line.text}
+                        </motion.p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Plain lyrics */}
+              {!isLoadingLyrics && lyrics && !lyrics.synced && (
+                <div className="pt-10 pb-16 pl-2 pr-8 space-y-3">
+                  {lyrics.lines.map((line, idx) => (
+                    <p key={idx} className="text-[20px] font-medium text-white/50 leading-relaxed">
+                      {line.text || <>&nbsp;</>}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!isLoadingLyrics && !lyrics && (
+                <div className="flex flex-col items-start justify-center h-full pl-2 gap-5">
+                  <div className="text-6xl">🎤</div>
+                  <div>
+                    <p className="text-[28px] font-semibold text-white/30">No lyrics available</p>
+                    <p className="text-white/18 text-base mt-2">
+                      {currentSong.artist} — {currentSong.title}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            </div>
           </div>
 
         </div>

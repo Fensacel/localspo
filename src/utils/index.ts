@@ -136,7 +136,7 @@ export function extractDominantColor(imageSrc: string): Promise<[number, number,
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        resolve([59, 130, 246]); // Default blue
+        resolve([110, 110, 110]); // Default neutral gray
         return;
       }
 
@@ -164,10 +164,10 @@ export function extractDominantColor(imageSrc: string): Promise<[number, number,
       if (count > 0) {
         resolve([Math.round(r / count), Math.round(g / count), Math.round(b / count)]);
       } else {
-        resolve([59, 130, 246]);
+        resolve([110, 110, 110]);
       }
     };
-    img.onerror = () => resolve([59, 130, 246]);
+    img.onerror = () => resolve([110, 110, 110]);
     img.src = imageSrc;
   });
 }

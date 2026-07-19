@@ -105,6 +105,7 @@ export interface Settings {
   crossfadeDuration: number;
   visualizer: VisualizerType;
   lyricsEnabled: boolean;
+  seekByLyricsEnabled: boolean;
   equalizerPreset: string;
   equalizerBands: number[];
   volume: number;

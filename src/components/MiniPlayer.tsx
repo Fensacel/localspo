@@ -15,6 +15,7 @@ import {
   ListMusic,
   Mic2,
   ChevronUp,
+  PanelRight,
 } from 'lucide-react';
 import { useRef, useState, useEffect } from 'react';
 
@@ -29,6 +30,7 @@ export function MiniPlayer() {
     repeatMode,
     shuffleMode,
     showLyrics,
+    showNowPlayingSidebar,
     setIsPlaying,
     setCurrentTime,
     setVolume,
@@ -38,9 +40,8 @@ export function MiniPlayer() {
     toggleQueue,
     toggleLyrics,
     toggleNowPlaying,
+    toggleNowPlayingSidebar,
     setIsSeeking: setStoreIsSeeking,
-    playNext,
-    playPrevious,
   } = usePlayerStore();
 
   const progressRef = useRef<HTMLDivElement>(null);
@@ -60,7 +61,13 @@ export function MiniPlayer() {
 
   const progress = duration > 0 ? (localTime / duration) * 100 : 0;
 
+  const seekRelative = (offset: number) => {
+    if (!duration) return;
 
+    const seekTime = Math.max(0, Math.min(duration, currentTime + offset));
+    setCurrentTime(seekTime);
+    window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+  };
 
   const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!progressRef.current || !duration) return;
@@ -201,8 +208,8 @@ export function MiniPlayer() {
             <Shuffle size={16} strokeWidth={1.8} />
           </ControlButton>
 
-          <ControlButton onClick={playPrevious}>
-            <SkipBack size={18} strokeWidth={1.8} fill="currentColor" />
+          <ControlButton onClick={() => seekRelative(-5)}>
+            <SkipBack size={18} strokeWidth={1.8} />
           </ControlButton>
 
           <motion.button
@@ -222,16 +229,16 @@ export function MiniPlayer() {
                 transition={{ duration: 0.15 }}
               >
                 {isPlaying ? (
-                  <Pause size={18} strokeWidth={1.8} fill="currentColor" />
+                  <Pause size={18} strokeWidth={1.8} fill="#000" className="text-black" />
                 ) : (
-                  <Play size={18} strokeWidth={1.8} fill="currentColor" className="ml-0.5" />
+                  <Play size={18} strokeWidth={1.8} fill="#000" className="text-black ml-0.5" />
                 )}
               </motion.div>
             </AnimatePresence>
           </motion.button>
 
-          <ControlButton onClick={playNext}>
-            <SkipForward size={18} strokeWidth={1.8} fill="currentColor" />
+          <ControlButton onClick={() => seekRelative(5)}>
+            <SkipForward size={18} strokeWidth={1.8} />
           </ControlButton>
 
           <ControlButton onClick={toggleRepeat} active={repeatMode !== 'off'} size="sm">
@@ -252,6 +259,10 @@ export function MiniPlayer() {
           <span className="text-[10px] text-text/40 font-mono tabular-nums">
             {formatTime(duration)}
           </span>
+
+          <ControlButton onClick={toggleNowPlayingSidebar} active={showNowPlayingSidebar} size="sm">
+            <PanelRight size={15} strokeWidth={1.8} />
+          </ControlButton>
 
           <ControlButton onClick={toggleLyrics} active={showLyrics} size="sm">
             <Mic2 size={15} strokeWidth={1.8} />

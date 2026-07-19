@@ -13,7 +13,7 @@ protocol.registerSchemesAsPrivileged([
   {
     scheme: 'local-audio',
     privileges: {
-      standard: false,
+      standard: true,
       secure: true,
       supportFetchAPI: true,
       stream: true,
@@ -38,7 +38,7 @@ const ELECTRON_DIST = path.join(__dirname);
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
 function getDataPath(): string {
-  const dataPath = path.join(app.getPath('userData'), 'BlueTune');
+  const dataPath = path.join(app.getPath('userData'), 'bluetune');
   if (!fs.existsSync(dataPath)) {
     fs.mkdirSync(dataPath, { recursive: true });
   }
@@ -53,7 +53,7 @@ function ensureDataFiles(): void {
     const filePath = path.join(dataPath, file);
     if (!fs.existsSync(filePath)) {
       const defaultData = file === 'settings.json'
-        ? JSON.stringify({ musicFolders: [], theme: 'blue-neon', accentColor: '#3B82F6', gapless: true, crossfade: false, crossfadeDuration: 3, visualizer: 'spectrum', lyricsEnabled: true, equalizerPreset: 'flat', equalizerBands: [0,0,0,0,0,0,0,0,0,0] }, null, 2)
+        ? JSON.stringify({ musicFolders: [], theme: 'calm-monochrome', accentColor: '#FFFFFF', gapless: true, crossfade: false, crossfadeDuration: 3, visualizer: 'spectrum', lyricsEnabled: true, seekByLyricsEnabled: true, equalizerPreset: 'flat', equalizerBands: [0,0,0,0,0,0,0,0,0,0] }, null, 2)
         : file === 'library.json'
         ? JSON.stringify({ songs: [], albums: [], artists: [], lastScan: null }, null, 2)
         : file === 'playlist.json'
@@ -85,7 +85,7 @@ function createWindow(): void {
     frame: false,
     titleBarStyle: 'hidden',
     transparent: false,
-    backgroundColor: '#030712',
+    backgroundColor: '#09090b',
     show: false,
     webPreferences: {
       preload: path.join(ELECTRON_DIST, 'preload.js'),
@@ -113,9 +113,52 @@ function createWindow(): void {
   });
 }
 
+// Helper to serve local files with byte-range support for seeking
+function serveLocalFile(filePath: string, request: Request): Response {
+  const stat = fs.statSync(filePath);
+  const fileSize = stat.size;
+  const range = request.headers.get('range');
+
+  let contentType = 'audio/mpeg';
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.flac') contentType = 'audio/flac';
+  else if (ext === '.wav') contentType = 'audio/wav';
+  else if (ext === '.ogg' || ext === '.oga') contentType = 'audio/ogg';
+  else if (ext === '.m4a') contentType = 'audio/mp4';
+  else if (ext === '.mp3') contentType = 'audio/mpeg';
+
+  if (range) {
+    const parts = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunksize = (end - start) + 1;
+    const fileStream = fs.createReadStream(filePath, { start, end });
+    return new Response(fileStream as any, {
+      status: 206,
+      statusText: 'Partial Content',
+      headers: {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': String(chunksize),
+        'Content-Type': contentType,
+      }
+    });
+  } else {
+    const fileStream = fs.createReadStream(filePath);
+    return new Response(fileStream as any, {
+      status: 200,
+      headers: {
+        'Content-Length': String(fileSize),
+        'Accept-Ranges': 'bytes',
+        'Content-Type': contentType,
+      }
+    });
+  }
+}
+
 // Register protocol for local audio files
 function registerLocalProtocol(): void {
-  const logFile = path.join(app.getPath('userData'), 'BlueTune', 'protocol-debug.log');
+  const logFile = path.join(app.getPath('userData'), 'bluetune', 'protocol-debug.log');
   const log = (msg: string) => {
     try {
       fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`, 'utf-8');
@@ -144,9 +187,8 @@ function registerLocalProtocol(): void {
         log(`[local-audio] Stripped leading slash: ${filePath}`);
       }
       const resolvedPath = path.resolve(filePath);
-      const fileUrl = pathToFileURL(resolvedPath).toString();
-      log(`[local-audio] Fetching fileUrl: ${fileUrl}`);
-      return net.fetch(fileUrl);
+      log(`[local-audio] Serving file stream for: ${resolvedPath} with range: ${request.headers.get('range')}`);
+      return serveLocalFile(resolvedPath, request);
     } catch (err) {
       log(`[local-audio] Error: ${(err as Error).message}`);
       throw err;

@@ -5,21 +5,21 @@ export default {
     extend: {
       colors: {
         bg: {
-          DEFAULT: '#030712',
-          surface: '#0F172A',
-          card: 'rgba(17,24,39,0.65)',
+          DEFAULT: '#09090b',
+          surface: '#18181b',
+          card: 'rgba(24,24,27,0.65)',
         },
         primary: {
-          DEFAULT: '#3B82F6',
-          hover: '#2563EB',
-          light: '#60A5FA',
-          glow: '#93C5FD',
+          DEFAULT: '#ffffff',
+          hover: '#e4e4e7',
+          light: '#f4f4f5',
+          glow: 'rgba(255,255,255,0.4)',
         },
-        accent: '#60A5FA',
+        accent: '#ffffff',
         text: {
           DEFAULT: '#F8FAFC',
-          secondary: '#94A3B8',
-          muted: '#64748B',
+          secondary: '#a1a1aa',
+          muted: '#71717a',
         },
         border: 'rgba(255,255,255,0.08)',
         danger: '#EF4444',
@@ -47,8 +47,8 @@ export default {
       },
       keyframes: {
         'glow-pulse': {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(59,130,246,0.3)' },
-          '50%': { boxShadow: '0 0 40px rgba(59,130,246,0.6)' },
+          '0%, 100%': { boxShadow: '0 0 20px rgba(255,255,255,0.1)' },
+          '50%': { boxShadow: '0 0 40px rgba(255,255,255,0.25)' },
         },
         'fade-in': {
           from: { opacity: '0' },
@@ -64,12 +64,13 @@ export default {
         },
       },
       boxShadow: {
-        glow: '0 0 20px rgba(59,130,246,0.3)',
-        'glow-lg': '0 0 40px rgba(59,130,246,0.4)',
-        'glow-xl': '0 0 60px rgba(59,130,246,0.5)',
-        glass: '0 8px 32px rgba(0,0,0,0.3)',
+        glow: '0 0 20px rgba(255,255,255,0.1)',
+        'glow-lg': '0 0 40px rgba(255,255,255,0.15)',
+        'glow-xl': '0 0 60px rgba(255,255,255,0.2)',
+        glass: '0 8px 32px rgba(0,0,0,0.4)',
       },
     },
   },
   plugins: [],
 };
+

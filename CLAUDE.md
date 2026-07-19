@@ -2,9 +2,9 @@
 
 ## Project
 
-BlueTune
+bluetune
 
-BlueTune adalah aplikasi desktop Local Music Player premium.
+bluetune adalah aplikasi desktop Local Music Player premium.
 
 Seluruh aplikasi berjalan secara offline.
 

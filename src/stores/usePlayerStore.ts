@@ -26,6 +26,7 @@ interface PlayerState {
   showQueue: boolean;
   showLyrics: boolean;
   showNowPlaying: boolean;
+  showNowPlayingSidebar: boolean;
 
   // Actions
   setCurrentSong: (song: Song | null) => void;
@@ -54,6 +55,7 @@ interface PlayerState {
   toggleQueue: () => void;
   toggleLyrics: () => void;
   toggleNowPlaying: () => void;
+  toggleNowPlayingSidebar: () => void;
   setShowNowPlaying: (show: boolean) => void;
 }
 
@@ -87,6 +89,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   showQueue: false,
   showLyrics: false,
   showNowPlaying: false,
+  showNowPlayingSidebar: false,
 
   setCurrentSong: (song) => set({ currentSong: song }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
@@ -113,8 +116,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         currentSong: null,
         isPlaying: false,
       });
-      console.log(get().queue.length);
-      console.log(get().queueIndex);
       console.log(get().currentSong);
       return;
     }
@@ -142,6 +143,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queueIndex = safeStartIndex;
     }
 
+    console.log(queue.length);
+    console.log(startIndex);
+    console.log(queue[startIndex]);
+
     set({
       queue,
       originalQueue,
@@ -149,8 +154,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentSong: queue[queueIndex] ?? null,
       isPlaying: true,
     });
-    console.log(get().queue.length);
-    console.log(get().queueIndex);
     console.log(get().currentSong);
   },
 
@@ -193,8 +196,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return null;
     }
 
-    console.log("NEXT", queueIndex + 1);
-
     const nextSong = queue[nextIndex];
     set({
       queueIndex: nextIndex,
@@ -203,53 +204,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isPlaying: true,
       history: state.currentSong ? [...state.history, state.currentSong] : state.history,
     });
-
-    console.log(get().queue.length);
-    console.log(get().queueIndex);
-    console.log(get().currentSong);
-
     return nextSong;
   },
 
   playPrevious: () => {
     const state = get();
-    const { queue, queueIndex, currentTime, repeatMode } = state;
+    const { queue, queueIndex, currentTime } = state;
 
     if (queue.length === 0) return null;
 
     // If more than 3 seconds in, restart current song
     if (currentTime > 3) {
-      console.log("PREVIOUS", queueIndex - 1);
       set({ currentTime: 0 });
-      window.dispatchEvent(new CustomEvent('player:seek', { detail: 0 }));
-      console.log(get().queue.length);
-      console.log(get().queueIndex);
-      console.log(get().currentSong);
       return state.currentSong;
     }
 
-    console.log("PREVIOUS", queueIndex - 1);
-
-    let prevIndex: number;
-    if (queueIndex > 0) {
-      prevIndex = queueIndex - 1;
-    } else {
-      // First song in queue
-      if (repeatMode === 'all') {
-        prevIndex = queue.length - 1;
-      } else if (repeatMode === 'one') {
-        prevIndex = queueIndex;
-      } else {
-        // repeatMode === 'off'
-        set({ currentTime: 0 });
-        window.dispatchEvent(new CustomEvent('player:seek', { detail: 0 }));
-        console.log(get().queue.length);
-        console.log(get().queueIndex);
-        console.log(get().currentSong);
-        return state.currentSong;
-      }
-    }
-
+    const prevIndex = queueIndex > 0 ? queueIndex - 1 : queue.length - 1;
     const prevSong = queue[prevIndex];
 
     set({
@@ -258,11 +228,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTime: 0,
       isPlaying: true,
     });
-
-    console.log(get().queue.length);
-    console.log(get().queueIndex);
-    console.log(get().currentSong);
-
     return prevSong;
   },
 
@@ -316,11 +281,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
     }),
 
-  toggleQueue: () => set((state) => ({ showQueue: !state.showQueue })),
+  toggleQueue: () =>
+    set((state) => ({
+      showQueue: !state.showQueue,
+      showNowPlayingSidebar: false,
+    })),
   toggleLyrics: () => set((state) => ({ showLyrics: !state.showLyrics })),
   toggleNowPlaying: () =>
     set((state) => ({
       showNowPlaying: !state.showNowPlaying,
+    })),
+  toggleNowPlayingSidebar: () =>
+    set((state) => ({
+      showNowPlayingSidebar: !state.showNowPlayingSidebar,
+      showQueue: false,
     })),
   setShowNowPlaying: (show) => set({ showNowPlaying: show }),
 }));

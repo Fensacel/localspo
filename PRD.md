@@ -1,6 +1,6 @@
 # Product Requirement Document
 
-# BlueTune
+# bluetune
 
 Version 1.0
 
@@ -8,7 +8,7 @@ Version 1.0
 
 ## Vision
 
-BlueTune adalah aplikasi desktop music player premium untuk Windows yang fokus pada kualitas audio, pengalaman pengguna modern, dan pengelolaan koleksi musik lokal.
+bluetune adalah aplikasi desktop music player premium untuk Windows yang fokus pada kualitas audio, pengalaman pengguna modern, dan pengelolaan koleksi musik lokal.
 
 Targetnya adalah menjadi alternatif terbaik untuk:
 

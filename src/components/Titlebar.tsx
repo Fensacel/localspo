@@ -20,9 +20,9 @@ export function Titlebar() {
     <div className="drag-region h-9 flex items-center justify-between px-4 bg-transparent z-50 relative shrink-0">
       {/* App title */}
       <div className="flex items-center gap-2 no-drag">
-        <div className="w-3 h-3 rounded-full bg-primary glow-blue" />
+        <div className="w-3 h-3 rounded-full bg-primary glow-primary" />
         <span className="text-xs font-semibold text-text/70 tracking-wider uppercase">
-          BlueTune
+          bluetune
         </span>
       </div>
 

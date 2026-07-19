@@ -60,6 +60,35 @@ function findCoverFile(audioPath: string): string | null {
   return null;
 }
 
+function formatEmbeddedLyrics(lyrics: any[]): string | null {
+  const parts: string[] = [];
+
+  for (const lyric of lyrics) {
+    if (typeof lyric === 'string') {
+      parts.push(lyric);
+    } else if (lyric && typeof lyric === 'object') {
+      if (Array.isArray(lyric.syncText) && lyric.syncText.length > 0) {
+        // Synchronized lyrics
+        const lrcLines = lyric.syncText.map((line: any) => {
+          const timestamp = line.timestamp || 0;
+          const mm = String(Math.floor(timestamp / 60000)).padStart(2, '0');
+          const ss = String(Math.floor((timestamp % 60000) / 1000)).padStart(2, '0');
+          const xx = String(Math.floor((timestamp % 1000) / 10)).padStart(2, '0');
+          return `[${mm}:${ss}.${xx}]${line.text || ''}`;
+        });
+        parts.push(lrcLines.join('\n'));
+      } else if (typeof lyric.text === 'string' && lyric.text.trim()) {
+        // Plain text lyrics
+        parts.push(lyric.text);
+      }
+    }
+  }
+
+  const result = parts.join('\n').trim();
+  return result.length > 0 ? result : null;
+}
+
+
 async function scanDirectory(dirPath: string): Promise<string[]> {
   const results: string[] = [];
 
@@ -91,7 +120,7 @@ async function scanDirectory(dirPath: string): Promise<string[]> {
 async function readMetadata(filePath: string, cachePath: string): Promise<RawMetadata | null> {
   try {
     // Dynamic import to handle ESM module
-    const mm = await import('music-metadata');
+    const mm = (await import('music-metadata')) as any;
     const metadata = await mm.parseFile(filePath);
     const stat = fs.statSync(filePath);
 
@@ -108,11 +137,9 @@ async function readMetadata(filePath: string, cachePath: string): Promise<RawMet
     // Extract embedded lyrics
     let embeddedLyrics: string | null = null;
     if (common.lyrics && common.lyrics.length > 0) {
-      embeddedLyrics = common.lyrics
-        .map((lyr: any) => (typeof lyr === 'string' ? lyr : lyr?.text || ''))
-        .filter((text: string) => text.trim().length > 0)
-        .join('\n');
+      embeddedLyrics = formatEmbeddedLyrics(common.lyrics);
     }
+
 
     // Find LRC file
     const lrcPath = findLrcFile(filePath);
@@ -424,7 +451,7 @@ export function registerScannerIpc(getDataPath: () => string): void {
     songId: string,
     audioPath: string,
     lrcPath: string | null,
-    hasEmbeddedLyrics: boolean,
+    hasEmbeddedLyrics: boolean
   ) => {
     const dataPath = getDataPath();
 
@@ -432,15 +459,27 @@ export function registerScannerIpc(getDataPath: () => string): void {
     if (hasEmbeddedLyrics) {
       const cachedPath = path.join(dataPath, 'cache', 'lyrics', `${songId}.txt`);
       if (fs.existsSync(cachedPath)) {
-        const content = fs.readFileSync(cachedPath, 'utf-8');
-        if (content.includes('[object Object]')) {
-          try {
-            fs.unlinkSync(cachedPath);
-            console.log(`[Scanner] Deleted corrupted lyrics cache: ${cachedPath}`);
-          } catch (e) {}
-        } else {
-          return { source: 'embedded', content };
+        const cachedContent = fs.readFileSync(cachedPath, 'utf-8');
+        if (cachedContent && cachedContent !== '[object Object]') {
+          return { source: 'embedded', content: cachedContent };
         }
+      }
+
+      // If cache doesn't exist or is corrupt, parse it on the fly and update cache
+      try {
+        const mm = (await import('music-metadata')) as any;
+        const metadata = await mm.parseFile(audioPath);
+        if (metadata.common.lyrics && metadata.common.lyrics.length > 0) {
+          const formatted = formatEmbeddedLyrics(metadata.common.lyrics);
+          if (formatted) {
+            const lyricsDir = path.join(dataPath, 'cache', 'lyrics');
+            if (!fs.existsSync(lyricsDir)) fs.mkdirSync(lyricsDir, { recursive: true });
+            fs.writeFileSync(cachedPath, formatted, 'utf-8');
+            return { source: 'embedded', content: formatted };
+          }
+        }
+      } catch (err) {
+        console.error('Error parsing embedded lyrics on the fly:', err);
       }
     }
 
@@ -449,32 +488,7 @@ export function registerScannerIpc(getDataPath: () => string): void {
       return { source: 'lrc', content: fs.readFileSync(lrcPath, 'utf-8') };
     }
 
-    const derivedLrcPath = lrcPath || findLrcFile(audioPath);
-    if (derivedLrcPath && fs.existsSync(derivedLrcPath)) {
-      return { source: 'lrc', content: fs.readFileSync(derivedLrcPath, 'utf-8') };
-    }
-
-    // Last resort: read embedded lyrics directly from the audio file.
-    if (audioPath && fs.existsSync(audioPath)) {
-      try {
-        const mm = await import('music-metadata');
-        const metadata = await mm.parseFile(audioPath);
-        const lyrics = metadata.common.lyrics;
-        if (lyrics && lyrics.length > 0) {
-          const content = lyrics
-            .map((lyr: any) => (typeof lyr === 'string' ? lyr : lyr?.text || ''))
-            .filter((text: string) => text.trim().length > 0)
-            .join('\n');
-
-          if (content.trim().length > 0) {
-            return { source: 'embedded-file', content };
-          }
-        }
-      } catch (error) {
-        console.error(`[Scanner] Failed reading embedded lyrics from audio file: ${audioPath}`, error);
-      }
-    }
-
     return null;
   });
 }
+

@@ -1,12 +1,12 @@
-# BlueTune UI Guide
+# bluetune UI Guide
 
 ---
 
 # Design Philosophy
 
-BlueTune bukan sekadar music player.
+bluetune bukan sekadar music player.
 
-BlueTune harus terasa seperti aplikasi desktop premium.
+bluetune harus terasa seperti aplikasi desktop premium.
 
 Keyword
 
@@ -35,27 +35,27 @@ Dark Mode Only
 
 Background
 
-#030712
+#09090b
 
 Surface
 
-#0F172A
+#18181b
 
 Card
 
-rgba(17,24,39,.65)
+rgba(24,24,27,0.65)
 
 Primary
 
-#3B82F6
+#ffffff
 
 Primary Hover
 
-#2563EB
+#e4e4e7
 
 Accent
 
-#60A5FA
+#ffffff
 
 Text
 
@@ -63,7 +63,7 @@ Text
 
 Secondary Text
 
-#94A3B8
+#a1a1aa
 
 Border
 
