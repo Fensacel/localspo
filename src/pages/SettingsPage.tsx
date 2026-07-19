@@ -156,7 +156,7 @@ export function SettingsPage() {
         {/* About */}
         <div className="glass rounded-2xl p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="w-3 h-3 rounded-full bg-primary glow-primary" />
+            <img src="/logo.png" className="w-5 h-5 object-contain" alt="" />
             <span className="text-sm font-bold tracking-wider">Archie</span>
           </div>
           <p className="text-xs text-text/30">Version 0.1.0</p>
