@@ -22,7 +22,7 @@ export function Titlebar() {
       <div className="flex items-center gap-2 no-drag">
         <div className="w-3 h-3 rounded-full bg-primary glow-primary" />
         <span className="text-xs font-semibold text-text/70 tracking-wider uppercase">
-          bluetune
+          Archie
         </span>
       </div>
 

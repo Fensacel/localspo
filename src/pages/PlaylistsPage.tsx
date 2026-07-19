@@ -8,6 +8,7 @@ export function PlaylistsPage() {
   const { playlists, createPlaylist, deletePlaylist, togglePinPlaylist, toggleFavoritePlaylist } =
     usePlaylistStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [playlistToDelete, setPlaylistToDelete] = useState<string | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ export function PlaylistsPage() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary rounded-button text-sm font-semibold text-white shadow-glow hover:bg-primary-hover transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
         >
           <Plus size={16} />
           New Playlist
@@ -104,9 +105,7 @@ export function PlaylistsPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm('Are you sure you want to delete this playlist?')) {
-                          deletePlaylist(playlist.id);
-                        }
+                        setPlaylistToDelete(playlist.id);
                       }}
                       className="p-1.5 rounded-lg glass hover:scale-110 hover:text-danger text-text/50 transition-all"
                     >
@@ -196,12 +195,47 @@ export function PlaylistsPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-primary rounded-button text-sm font-semibold text-white shadow-glow hover:bg-primary-hover transition-colors"
+                    className="px-4 py-2 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
                   >
                     Create
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {playlistToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-sm bg-zinc-900 border border-white/10 p-6 rounded-2xl shadow-2xl text-center"
+            >
+              <h3 className="text-base font-bold mb-2 text-text">Delete Playlist</h3>
+              <p className="text-xs text-text/50 mb-6">
+                Are you sure you want to delete this playlist? This action cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => setPlaylistToDelete(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-text/60 hover:text-text hover:bg-white/5 transition-colors border border-white/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    deletePlaylist(playlistToDelete);
+                    setPlaylistToDelete(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-red-600 text-white hover:bg-red-500 transition-colors shadow-glow"
+                >
+                  Delete
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

@@ -84,9 +84,10 @@ export function HomePage() {
   const topAlbums = albums.slice(0, 8);
   const topArtists = artists.slice(0, 6);
 
-  const handlePlaySong = (song: Song, songList: Song[]) => {
-    const index = songList.findIndex((s) => s.id === song.id);
-    setQueue(songList, index);
+  const handlePlaySong = (song: Song) => {
+    const sortedSongs = [...songs].sort((a, b) => a.title.localeCompare(b.title));
+    const index = sortedSongs.findIndex((s) => s.id === song.id);
+    setQueue(sortedSongs, index >= 0 ? index : 0);
   };
 
   const handlePlayAlbum = (album: Album) => {
@@ -133,7 +134,7 @@ export function HomePage() {
               <QuickPickCard
                 key={song.id}
                 song={song}
-                onPlay={() => handlePlaySong(song, randomPicks)}
+                onPlay={() => handlePlaySong(song)}
                 isPlaying={currentSong?.id === song.id}
               />
             ))}
@@ -150,7 +151,7 @@ export function HomePage() {
               <SongCard
                 key={song.id}
                 song={song}
-                onPlay={() => handlePlaySong(song, recentlyAdded)}
+                onPlay={() => handlePlaySong(song)}
                 isPlaying={currentSong?.id === song.id}
               />
             ))}
@@ -244,7 +245,7 @@ function EmptyLibrary() {
             window.dispatchEvent(new CustomEvent('scan-folder', { detail: folder }));
           }
         }}
-        className="px-6 py-3 bg-primary rounded-button text-sm font-semibold text-white shadow-glow hover:bg-primary-hover transition-colors"
+        className="px-6 py-3 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
       >
         Add Music Folder
       </motion.button>

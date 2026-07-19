@@ -177,8 +177,9 @@ export function SearchPage() {
                         key={song.id}
                         whileTap={{ scale: 0.995 }}
                         onDoubleClick={() => {
-                          const index = results.songs.findIndex((s) => s.id === song.id);
-                          setQueue(results.songs, index);
+                          const sortedSongs = [...songs].sort((a, b) => a.title.localeCompare(b.title));
+                          const index = sortedSongs.findIndex((s) => s.id === song.id);
+                          setQueue(sortedSongs, index >= 0 ? index : 0);
                         }}
                         className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${
                           isCurrent ? 'bg-primary/10' : 'hover:bg-white/[0.03]'

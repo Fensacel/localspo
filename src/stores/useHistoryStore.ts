@@ -37,8 +37,8 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       duration,
     };
 
-    // Filter out duplicates within a short timeframe or just keep the last 100 entries
-    const updatedEntries = [newEntry, ...entries].slice(0, 100);
+    // Filter out duplicates within a short timeframe or just keep the last 1000 entries
+    const updatedEntries = [newEntry, ...entries].slice(0, 1000);
 
     set({ entries: updatedEntries });
     await window.electronAPI.data.write('history.json', { entries: updatedEntries });

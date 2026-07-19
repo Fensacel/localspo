@@ -81,65 +81,93 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   },
 
   addSongToPlaylist: async (playlistId, songId) => {
-    const { playlists } = get();
-    const updatedPlaylists = playlists.map((p) => {
-      if (p.id === playlistId) {
-        // Prevent duplicate songs in playlist
-        const songIds = p.songIds.includes(songId) ? p.songIds : [...p.songIds, songId];
+    try {
+      const { playlists } = get();
+      const updatedPlaylists = playlists.map((p) => {
+        if (p.id === playlistId) {
+          // Prevent duplicate songs in playlist
+          const songIds = p.songIds.includes(songId) ? p.songIds : [...p.songIds, songId];
 
-        // If playlist doesn't have a cover, use the cover of the added song
-        let coverPath = p.coverPath;
-        if (!coverPath) {
-          const song = useLibraryStore.getState().getSongById(songId);
-          if (song && song.coverPath) {
-            coverPath = song.coverPath;
+          // If playlist doesn't have a cover, use the cover of the added song
+          let coverPath = p.coverPath;
+          if (!coverPath) {
+            try {
+              const song = useLibraryStore.getState().getSongById(songId);
+              if (song && song.coverPath) {
+                coverPath = song.coverPath;
+              }
+            } catch (coverErr) {
+              console.warn('Library store cover retrieval failed:', coverErr);
+            }
           }
+
+          return {
+            ...p,
+            songIds,
+            coverPath,
+            updatedAt: Date.now(),
+          };
         }
+        return p;
+      });
 
-        return {
-          ...p,
-          songIds,
-          coverPath,
-          updatedAt: Date.now(),
-        };
+      set({ playlists: updatedPlaylists });
+      await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+
+      const targetPlaylist = playlists.find((p) => p.id === playlistId);
+      if (targetPlaylist) {
+        useToastStore.getState().showToast(`Added to ${targetPlaylist.name}`);
       }
-      return p;
-    });
-
-    set({ playlists: updatedPlaylists });
-    await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+    } catch (err) {
+      console.error('Error in addSongToPlaylist:', err);
+      useToastStore.getState().showToast(`Failed: ${(err as Error).message}`, 'error');
+    }
   },
 
   removeSongFromPlaylist: async (playlistId, songId) => {
-    const { playlists } = get();
-    const updatedPlaylists = playlists.map((p) => {
-      if (p.id === playlistId) {
-        const songIds = p.songIds.filter((id) => id !== songId);
+    try {
+      const { playlists } = get();
+      const updatedPlaylists = playlists.map((p) => {
+        if (p.id === playlistId) {
+          const songIds = p.songIds.filter((id) => id !== songId);
 
-        // Update cover path if the cover song was removed and we have other songs
-        let coverPath = p.coverPath;
-        if (songIds.length === 0) {
-          coverPath = null;
-        } else if (p.coverPath) {
-          // If the removed song was the source of the cover, optionally update it to the first song in list
-          const firstSong = useLibraryStore.getState().getSongById(songIds[0]);
-          if (firstSong && firstSong.coverPath) {
-            coverPath = firstSong.coverPath;
+          // Update cover path if the cover song was removed and we have other songs
+          let coverPath = p.coverPath;
+          if (songIds.length === 0) {
+            coverPath = null;
+          } else if (p.coverPath) {
+            // If the removed song was the source of the cover, optionally update it to the first song in list
+            try {
+              const firstSong = useLibraryStore.getState().getSongById(songIds[0]);
+              if (firstSong && firstSong.coverPath) {
+                coverPath = firstSong.coverPath;
+              }
+            } catch (coverErr) {
+              console.warn('Library store cover retrieval failed:', coverErr);
+            }
           }
+
+          return {
+            ...p,
+            songIds,
+            coverPath,
+            updatedAt: Date.now(),
+          };
         }
+        return p;
+      });
 
-        return {
-          ...p,
-          songIds,
-          coverPath,
-          updatedAt: Date.now(),
-        };
+      set({ playlists: updatedPlaylists });
+      await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+
+      const targetPlaylist = playlists.find((p) => p.id === playlistId);
+      if (targetPlaylist) {
+        useToastStore.getState().showToast(`Removed from ${targetPlaylist.name}`, 'info');
       }
-      return p;
-    });
-
-    set({ playlists: updatedPlaylists });
-    await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+    } catch (err) {
+      console.error('Error in removeSongFromPlaylist:', err);
+      useToastStore.getState().showToast(`Failed: ${(err as Error).message}`, 'error');
+    }
   },
 
   togglePinPlaylist: async (id) => {
@@ -179,3 +207,4 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
 // Import useLibraryStore inside the file to access song cover metadata
 import { useLibraryStore } from './useLibraryStore';
+import { useToastStore } from './useToastStore';

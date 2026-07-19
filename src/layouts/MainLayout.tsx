@@ -10,6 +10,7 @@ import { NowPlayingOverlay } from '@/features/player/NowPlayingOverlay';
 import { QueuePanel } from '@/components/QueuePanel';
 import { LyricsView } from '@/features/lyrics/LyricsView';
 import { NowPlayingPanel } from '@/components/NowPlayingPanel';
+import { ToastContainer } from '@/components/ToastContainer';
 
 export function MainLayout() {
   const location = useLocation();
@@ -31,6 +32,11 @@ export function MainLayout() {
       setBgColor([110, 110, 110]);
     }
   }, [currentSong?.coverPath]);
+
+  // Auto-close lyrics and now playing overlays on route change
+  useEffect(() => {
+    usePlayerStore.setState({ showLyrics: false, showNowPlaying: false });
+  }, [location.pathname]);
 
   return (
     <div className="w-full h-full flex flex-col relative overflow-hidden">
@@ -120,6 +126,9 @@ export function MainLayout() {
 
       {/* Now Playing Fullscreen Overlay */}
       <AnimatePresence>{showNowPlaying && <NowPlayingOverlay />}</AnimatePresence>
+
+      {/* Global Toast Alerts */}
+      <ToastContainer />
     </div>
   );
 }

@@ -157,7 +157,7 @@ export function SettingsPage() {
         <div className="glass rounded-2xl p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <div className="w-3 h-3 rounded-full bg-primary glow-primary" />
-            <span className="text-sm font-bold tracking-wider">bluetune</span>
+            <span className="text-sm font-bold tracking-wider">Archie</span>
           </div>
           <p className="text-xs text-text/30">Version 0.1.0</p>
           <p className="text-xs text-text/20 mt-1">Premium Local Music Player</p>

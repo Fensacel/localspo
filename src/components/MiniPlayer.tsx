@@ -42,6 +42,8 @@ export function MiniPlayer() {
     toggleNowPlaying,
     toggleNowPlayingSidebar,
     setIsSeeking: setStoreIsSeeking,
+    playNext,
+    playPrevious,
   } = usePlayerStore();
 
   const progressRef = useRef<HTMLDivElement>(null);
@@ -61,13 +63,7 @@ export function MiniPlayer() {
 
   const progress = duration > 0 ? (localTime / duration) * 100 : 0;
 
-  const seekRelative = (offset: number) => {
-    if (!duration) return;
 
-    const seekTime = Math.max(0, Math.min(duration, currentTime + offset));
-    setCurrentTime(seekTime);
-    window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
-  };
 
   const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!progressRef.current || !duration) return;
@@ -208,7 +204,7 @@ export function MiniPlayer() {
             <Shuffle size={16} strokeWidth={1.8} />
           </ControlButton>
 
-          <ControlButton onClick={() => seekRelative(-5)}>
+          <ControlButton onClick={playPrevious}>
             <SkipBack size={18} strokeWidth={1.8} />
           </ControlButton>
 
@@ -237,7 +233,7 @@ export function MiniPlayer() {
             </AnimatePresence>
           </motion.button>
 
-          <ControlButton onClick={() => seekRelative(5)}>
+          <ControlButton onClick={playNext}>
             <SkipForward size={18} strokeWidth={1.8} />
           </ControlButton>
 

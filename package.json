@@ -1,9 +1,9 @@
 {
-  "name": "bluetune",
+  "name": "archie",
   "version": "0.1.0",
   "description": "Premium Desktop Local Music Player",
   "main": "dist-electron/main.js",
-  "author": "bluetune",
+  "author": "Archie",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -54,8 +54,8 @@
     "vite-plugin-electron-renderer": "^1.0.0"
   },
   "build": {
-    "appId": "com.bluetune.app",
-    "productName": "bluetune",
+    "appId": "com.archie.app",
+    "productName": "Archie",
     "directories": {
       "output": "release"
     },

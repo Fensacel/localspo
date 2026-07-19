@@ -51,6 +51,11 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
       albumIds,
       artistIds,
     });
+
+    useToastStore.getState().showToast(
+      isFav ? 'Removed from Liked Songs' : 'Added to Liked Songs',
+      isFav ? 'info' : 'success'
+    );
   },
 
   toggleFavoriteAlbum: async (albumId) => {
@@ -64,6 +69,11 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
       albumIds: newAlbumIds,
       artistIds,
     });
+
+    useToastStore.getState().showToast(
+      isFav ? 'Removed from Library' : 'Saved to Library',
+      isFav ? 'info' : 'success'
+    );
   },
 
   toggleFavoriteArtist: async (artistId) => {
@@ -79,9 +89,16 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
       albumIds,
       artistIds: newArtistIds,
     });
+
+    useToastStore.getState().showToast(
+      isFav ? 'Removed from Library' : 'Saved to Library',
+      isFav ? 'info' : 'success'
+    );
   },
 
   isFavoriteSong: (songId) => get().songIds.includes(songId),
   isFavoriteAlbum: (albumId) => get().albumIds.includes(albumId),
   isFavoriteArtist: (artistId) => get().artistIds.includes(artistId),
 }));
+
+import { useToastStore } from './useToastStore';
