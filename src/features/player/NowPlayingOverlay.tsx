@@ -14,6 +14,7 @@ import {
   Shuffle,
   Repeat,
   Repeat1,
+  Minimize2,
 } from 'lucide-react';
 import { parseLyrics, findCurrentLyricIndex } from '@/services/lyricsParser';
 import { formatTime, getImageUrl } from '@/utils';
@@ -422,15 +423,24 @@ export function NowPlayingOverlay() {
               </motion.button>
             </div>
 
-            {/* Volume */}
-            <div className="flex items-center gap-3 w-full">
+            {/* Volume & Exit Fullscreen */}
+            <div className="flex items-center gap-5 w-full">
+              <div className="flex items-center gap-3 flex-1">
+                <button
+                  onClick={() => toggleMute()}
+                  className="text-white/35 hover:text-white/65 transition-colors shrink-0"
+                >
+                  {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                </button>
+                <Slider value={effectiveVolume} onChange={handleVolumeChange} thin />
+              </div>
               <button
-                onClick={() => toggleMute()}
-                className="text-white/35 hover:text-white/65 transition-colors shrink-0"
+                onClick={() => setShowNowPlaying(false)}
+                className="text-white/35 hover:text-white/70 hover:scale-105 active:scale-95 transition-all duration-200 shrink-0 p-1"
+                title="Exit Fullscreen"
               >
-                {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                <Minimize2 size={16} />
               </button>
-              <Slider value={effectiveVolume} onChange={handleVolumeChange} thin />
             </div>
 
           </div>
@@ -470,6 +480,70 @@ export function NowPlayingOverlay() {
                       const isActive = idx === currentLyricIndex;
                       const isPast = currentLyricIndex >= 0 && idx < currentLyricIndex;
 
+                      if (isActive) {
+                        const tokens = line.text.split(/(\s+)/);
+                        const wordsOnly = tokens.filter(t => t.trim().length > 0);
+                        const totalChars = wordsOnly.reduce((acc, w) => acc + w.length, 0);
+                        const lineStart = line.time;
+                        const lineEnd = line.endTime || (line.time + 3.5);
+                        const lineDuration = Math.max(0.5, lineEnd - lineStart);
+                        
+                        let cumulativeChars = 0;
+
+                        return (
+                          <div
+                            key={idx}
+                            ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
+                            onClick={() => {
+                              if (!seekByLyricsEnabled) return;
+                              const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
+                              usePlayerStore.getState().setCurrentTime(seekTime);
+                              window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                            }}
+                            className={`px-5 py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
+                          >
+                            <motion.p
+                              animate={{
+                                fontSize: '44px',
+                                fontWeight: 800,
+                                opacity: 1,
+                                color: '#ffffff',
+                              }}
+                              transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                              style={{ lineHeight: 1.25 }}
+                            >
+                              {totalChars === 0 ? line.text : tokens.map((token, tokenIdx) => {
+                                const isWhitespace = token.trim().length === 0;
+                                if (isWhitespace) {
+                                  return <span key={tokenIdx}>{token}</span>;
+                                }
+
+                                const wordLength = token.length;
+                                const wordStartOffset = (cumulativeChars / totalChars) * lineDuration;
+                                const wordStart = lineStart + wordStartOffset;
+                                const isWordActive = currentTime >= wordStart;
+
+                                cumulativeChars += wordLength;
+
+                                return (
+                                  <motion.span
+                                    key={tokenIdx}
+                                    animate={{
+                                      color: isWordActive ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
+                                      textShadow: isWordActive ? '0 0 12px rgba(255, 255, 255, 0.4)' : 'none',
+                                    }}
+                                    transition={{ duration: 0.15 }}
+                                    className="inline-block"
+                                  >
+                                    {token}
+                                  </motion.span>
+                                );
+                              })}
+                            </motion.p>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div
                           key={idx}
@@ -485,9 +559,9 @@ export function NowPlayingOverlay() {
                         >
                           <motion.p
                             animate={{
-                              fontSize: isActive ? '44px' : '28px',
-                              fontWeight: isActive ? 800 : 700,
-                              opacity: isActive ? 1 : isPast ? 0.35 : 0.5,
+                              fontSize: '28px',
+                              fontWeight: 700,
+                              opacity: isPast ? 0.35 : 0.5,
                               color: '#ffffff',
                             }}
                             transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
