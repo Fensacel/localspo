@@ -9,6 +9,7 @@ import {
   Plus,
   RefreshCw,
 } from 'lucide-react';
+import logoUrl from '@/assets/logo.png';
 
 export function SettingsPage() {
   const {
@@ -16,7 +17,6 @@ export function SettingsPage() {
     gapless,
     crossfade,
     crossfadeDuration,
-    visualizer,
     lyricsEnabled,
     seekByLyricsEnabled,
     updateSettings,
@@ -134,33 +134,16 @@ export function SettingsPage() {
             enabled={seekByLyricsEnabled}
             onChange={(v) => updateSettings({ seekByLyricsEnabled: v })}
           />
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <p className="text-sm font-medium">Visualizer</p>
-              <p className="text-xs text-text/30">Choose the audio visualizer style</p>
-            </div>
-            <select
-              value={visualizer}
-              onChange={(e) => updateSettings({ visualizer: e.target.value as typeof visualizer })}
-              className="px-3 py-1.5 glass rounded-lg text-sm text-text bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="spectrum">Spectrum</option>
-              <option value="waveform">Waveform</option>
-              <option value="particle">Particle</option>
-              <option value="circular">Circular</option>
-              <option value="none">None</option>
-            </select>
-          </div>
+
         </SettingsSection>
 
         {/* About */}
         <div className="glass rounded-2xl p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <img src="/logo.png" className="w-5 h-5 object-contain" alt="" />
+            <img src={logoUrl} className="w-5 h-5 object-contain" alt="" />
             <span className="text-sm font-bold tracking-wider">Archie</span>
           </div>
-          <p className="text-xs text-text/30">Version 0.1.0</p>
-          <p className="text-xs text-text/20 mt-1">Premium Local Music Player</p>
+          <p className="text-xs text-text/30">Version 1.0.0</p>
         </div>
       </div>
     </div>

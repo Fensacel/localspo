@@ -26,27 +26,36 @@ export function AddToPlaylistMenu({ songId }: AddToPlaylistMenuProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleAdd = async (playlistId: string) => {
+  const handleAdd = async (e: React.MouseEvent, playlistId: string) => {
+    e.stopPropagation();
+    e.preventDefault();
     await addSongToPlaylist(playlistId, songId);
-    setIsOpen(false);
+    setTimeout(() => setIsOpen(false), 50);
   };
 
   const handleCreateAndAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!newPlaylistName.trim()) return;
     try {
       const newPlaylist = await createPlaylist(newPlaylistName.trim());
       await addSongToPlaylist(newPlaylist.id, songId);
       setNewPlaylistName('');
       setIsCreating(false);
-      setIsOpen(false);
+      setTimeout(() => setIsOpen(false), 50);
     } catch (err) {
       console.error('Failed to create and add to playlist:', err);
     }
   };
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div
+      className="relative"
+      ref={menuRef}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -67,6 +76,9 @@ export function AddToPlaylistMenu({ songId }: AddToPlaylistMenuProps) {
             transition={{ duration: 0.15 }}
             className="absolute right-0 mt-1.5 w-52 glass rounded-xl py-1 z-30 shadow-glass border border-white/10 text-left font-sans"
             onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
           >
             <p className="px-3 py-1.5 text-[10px] uppercase font-bold tracking-wider text-text/30 border-b border-white/5 mb-1">
               Add to Playlist
@@ -79,7 +91,8 @@ export function AddToPlaylistMenu({ songId }: AddToPlaylistMenuProps) {
                   return (
                     <button
                       key={playlist.id}
-                      onClick={() => !alreadyAdded && handleAdd(playlist.id)}
+                      onClick={(e) => !alreadyAdded && handleAdd(e, playlist.id)}
+                      onMouseDown={(e) => e.stopPropagation()}
                       disabled={alreadyAdded}
                       className={`w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors ${
                         alreadyAdded
@@ -111,10 +124,14 @@ export function AddToPlaylistMenu({ songId }: AddToPlaylistMenuProps) {
                     value={newPlaylistName}
                     onChange={(e) => setNewPlaylistName(e.target.value)}
                     autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                     className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-text placeholder:text-text/25 focus:outline-none focus:ring-1 focus:ring-primary/40 w-full"
                   />
                   <button
                     type="submit"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                     className="px-2.5 py-1 bg-primary text-zinc-950 rounded-lg font-semibold text-[10px] shadow-glow"
                   >
                     Add
@@ -122,7 +139,8 @@ export function AddToPlaylistMenu({ songId }: AddToPlaylistMenuProps) {
                 </form>
               ) : (
                 <button
-                  onClick={() => setIsCreating(true)}
+                  onClick={(e) => { e.stopPropagation(); setIsCreating(true); }}
+                  onMouseDown={(e) => e.stopPropagation()}
                   className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-white/5 transition-colors"
                 >
                   <Plus size={12} />

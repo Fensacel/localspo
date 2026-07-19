@@ -11,6 +11,7 @@ export interface ElectronAPI {
   // Dialog
   dialog: {
     openFolder: () => Promise<string | null>;
+    openImage: () => Promise<string | null>;
   };
   // Data persistence
   data: {
@@ -67,6 +68,7 @@ const electronAPI: ElectronAPI = {
   },
   dialog: {
     openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+    openImage: () => ipcRenderer.invoke('dialog:openImage'),
   },
   data: {
     read: (fileName) => ipcRenderer.invoke('data:read', fileName),

@@ -1,100 +1,53 @@
-import { useLibraryStore, usePlayerStore } from '@/stores';
+import { useLibraryStore, usePlayerStore, usePlaylistStore } from '@/stores';
 import { motion } from 'framer-motion';
-import { Play, Clock, Disc3, Music, Sparkles, RefreshCw } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Play, Disc3, Music, ListMusic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { Song, Album } from '@/types';
+import type { Song, Album, Playlist } from '@/types';
 import { getImageUrl } from '@/utils';
 
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.06 },
+    transition: { staggerChildren: 0.07 },
   },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 },
+  hidden: { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
 };
 
 export function HomePage() {
   const { songs, albums, artists } = useLibraryStore();
-  const { setQueue, currentSong } = usePlayerStore();
+  const { playlists } = usePlaylistStore();
+  const { setQueue, currentSong, isPlaying, setIsPlaying } = usePlayerStore();
   const navigate = useNavigate();
 
-  const recentlyAdded = [...songs].sort((a, b) => b.addedAt - a.addedAt).slice(0, 8);
-
-  const [randomPicks, setRandomPicks] = useState<Song[]>([]);
-
-  // Local helper to save picks to localStorage
-  const savePicks = (picks: Song[], dateStr: string, libSizeStr: string) => {
-    const ids = picks.map((s) => s.id);
-    localStorage.setItem('bluetune_quick_picks_ids', JSON.stringify(ids));
-    localStorage.setItem('bluetune_quick_picks_date', dateStr);
-    localStorage.setItem('bluetune_quick_picks_lib_size', libSizeStr);
-  };
-
-  // Local helper to select random picks
-  const getRandomPicks = (songsList: Song[], count: number): Song[] => {
-    const shuffled = [...songsList].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, Math.min(count, songsList.length));
-  };
-
-  useEffect(() => {
-    if (songs.length === 0) return;
-
-    const storedIds = localStorage.getItem('bluetune_quick_picks_ids');
-    const storedDate = localStorage.getItem('bluetune_quick_picks_date');
-    const storedLibSize = localStorage.getItem('bluetune_quick_picks_lib_size');
-
-    const currentDateStr = new Date().toDateString();
-    const currentLibSizeStr = songs.length.toString();
-
-    let idsToUse: string[] = [];
-
-    if (storedIds && storedDate === currentDateStr && storedLibSize === currentLibSizeStr) {
-      try {
-        idsToUse = JSON.parse(storedIds);
-      } catch {
-        idsToUse = [];
-      }
-    }
-
-    let picks = idsToUse
-      .map((id) => songs.find((s) => s.id === id))
-      .filter((s): s is Song => s !== undefined);
-
-    if (picks.length < Math.min(6, songs.length) && songs.length > 0) {
-      picks = getRandomPicks(songs, 6);
-      savePicks(picks, currentDateStr, currentLibSizeStr);
-    }
-
-    setRandomPicks(picks);
-  }, [songs]);
-
-  const handleRefreshPicks = () => {
-    if (songs.length === 0) return;
-    const picks = getRandomPicks(songs, 6);
-    savePicks(picks, new Date().toDateString(), songs.length.toString());
-    setRandomPicks(picks);
-  };
-
-  const topAlbums = albums.slice(0, 8);
-  const topArtists = artists.slice(0, 6);
+  const recentlyAdded = [...songs].sort((a, b) => b.addedAt - a.addedAt).slice(0, 10);
+  const topAlbums = albums.slice(0, 10);
+  const topArtists = artists.slice(0, 10);
 
   const handlePlaySong = (song: Song) => {
-    const sortedSongs = [...songs].sort((a, b) => a.title.localeCompare(b.title));
-    const index = sortedSongs.findIndex((s) => s.id === song.id);
-    setQueue(sortedSongs, index >= 0 ? index : 0);
+    if (currentSong?.id === song.id) {
+      setIsPlaying(!isPlaying);
+      window.dispatchEvent(new CustomEvent('player:toggle'));
+    } else {
+      const idx = recentlyAdded.findIndex((s) => s.id === song.id);
+      setQueue(recentlyAdded, idx >= 0 ? idx : 0);
+    }
   };
 
   const handlePlayAlbum = (album: Album) => {
     const albumSongs = useLibraryStore.getState().getAlbumSongs(album.id);
-    if (albumSongs.length > 0) {
-      setQueue(albumSongs, 0);
-    }
+    if (albumSongs.length > 0) setQueue(albumSongs, 0);
+  };
+
+  const handlePlayPlaylist = (playlist: Playlist) => {
+    const playlistSongs = playlist.songIds
+      .map((id) => useLibraryStore.getState().getSongById(id))
+      .filter((s): s is Song => s !== undefined);
+    if (playlistSongs.length > 0) setQueue(playlistSongs, 0);
   };
 
   if (songs.length === 0) {
@@ -106,36 +59,26 @@ export function HomePage() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-8"
+      className="space-y-10 pb-4"
     >
-      {/* Hero */}
+      {/* Hero — Now Playing banner */}
       {currentSong && (
         <motion.div variants={itemVariants}>
           <HeroSection song={currentSong} />
         </motion.div>
       )}
 
-      {/* Quick Picks */}
-      {randomPicks.length > 0 && (
+      {/* Your Playlists (Quick Picks replacement) */}
+      {playlists.length > 0 && (
         <motion.div variants={itemVariants}>
-          <div className="flex items-center justify-between">
-            <SectionHeader icon={Sparkles} title="Quick Picks" />
-            <button
-              onClick={handleRefreshPicks}
-              className="px-2.5 py-1 rounded-lg glass text-text/55 hover:text-primary hover:bg-white/5 transition-all flex items-center gap-1.5 text-xs font-semibold"
-              title="Refresh Quick Picks"
-            >
-              <RefreshCw size={12} />
-              Refresh
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-3 mt-3">
-            {randomPicks.map((song) => (
-              <QuickPickCard
-                key={song.id}
-                song={song}
-                onPlay={() => handlePlaySong(song)}
-                isPlaying={currentSong?.id === song.id}
+          <SectionHeader title="Your Playlists" onSeeAll={() => navigate('/playlists')} />
+          <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-none">
+            {playlists.map((playlist) => (
+              <PlaylistCard
+                key={playlist.id}
+                playlist={playlist}
+                onPlay={() => handlePlayPlaylist(playlist)}
+                onClick={() => navigate(`/playlists/${playlist.id}`)}
               />
             ))}
           </div>
@@ -145,25 +88,25 @@ export function HomePage() {
       {/* Recently Added */}
       {recentlyAdded.length > 0 && (
         <motion.div variants={itemVariants}>
-          <SectionHeader icon={Clock} title="Recently Added" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-3">
+          <SectionHeader title="Recently Added" />
+          <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-none">
             {recentlyAdded.map((song) => (
               <SongCard
                 key={song.id}
                 song={song}
                 onPlay={() => handlePlaySong(song)}
-                isPlaying={currentSong?.id === song.id}
+                isPlaying={currentSong?.id === song.id && isPlaying}
               />
             ))}
           </div>
         </motion.div>
       )}
 
-      {/* Top Albums */}
+      {/* Albums */}
       {topAlbums.length > 0 && (
         <motion.div variants={itemVariants}>
-          <SectionHeader icon={Disc3} title="Albums" onSeeAll={() => navigate('/albums')} />
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-3">
+          <SectionHeader title="Albums" onSeeAll={() => navigate('/albums')} />
+          <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-none">
             {topAlbums.map((album) => (
               <AlbumCard
                 key={album.id}
@@ -179,8 +122,8 @@ export function HomePage() {
       {/* Artists */}
       {topArtists.length > 0 && (
         <motion.div variants={itemVariants}>
-          <SectionHeader icon={Music} title="Artists" onSeeAll={() => navigate('/artists')} />
-          <div className="flex gap-4 mt-3 overflow-x-auto pb-2">
+          <SectionHeader title="Artists" onSeeAll={() => navigate('/artists')} />
+          <div className="flex gap-5 mt-4 overflow-x-auto pb-2 scrollbar-none">
             {topArtists.map((artist) => (
               <motion.div
                 key={artist.id}
@@ -189,7 +132,7 @@ export function HomePage() {
                 onClick={() => navigate(`/artists/${artist.id}`)}
                 className="flex flex-col items-center gap-2 cursor-pointer shrink-0"
               >
-                <div className="w-28 h-28 rounded-full glass flex items-center justify-center overflow-hidden">
+                <div className="w-32 h-32 rounded-full glass flex items-center justify-center overflow-hidden ring-2 ring-white/5">
                   {artist.coverPath ? (
                     <img
                       src={getImageUrl(artist.coverPath)}
@@ -200,12 +143,10 @@ export function HomePage() {
                       }}
                     />
                   ) : (
-                    <Music size={32} className="text-text/20" />
+                    <Music size={36} className="text-text/20" />
                   )}
                 </div>
-                <p className="text-xs text-text/70 font-medium text-center w-28 truncate">
-                  {artist.name}
-                </p>
+                <p className="text-xs font-semibold text-center w-32 truncate">{artist.name}</p>
                 <p className="text-[10px] text-text/30">
                   {artist.totalAlbums} album{artist.totalAlbums !== 1 ? 's' : ''}
                 </p>
@@ -218,7 +159,7 @@ export function HomePage() {
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────
+// ─── Sub-components ──────────────────────────────────────
 
 function EmptyLibrary() {
   return (
@@ -233,8 +174,8 @@ function EmptyLibrary() {
       </motion.div>
       <h2 className="text-2xl font-bold text-text mb-2">No Music Yet</h2>
       <p className="text-text/40 mb-6 max-w-sm">
-        Add a music folder to start building your library. bluetune will scan and organize
-        everything for you.
+        Add a music folder to start building your library. Archie will scan and organize everything
+        for you.
       </p>
       <motion.button
         whileHover={{ scale: 1.05 }}
@@ -257,11 +198,11 @@ function HeroSection({ song }: { song: Song }) {
   const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : '/default-cover.png';
 
   return (
-    <div className="relative rounded-3xl overflow-hidden h-48 glass">
+    <div className="relative rounded-3xl overflow-hidden h-44 glass">
       <img
         src={coverSrc}
         alt=""
-        className="absolute inset-0 w-full h-full object-cover opacity-30 blur-2xl scale-110"
+        className="absolute inset-0 w-full h-full object-cover opacity-25 blur-2xl scale-110"
         onError={(e) => {
           (e.target as HTMLImageElement).src = '/default-cover.png';
         }}
@@ -271,7 +212,7 @@ function HeroSection({ song }: { song: Song }) {
         <img
           src={coverSrc}
           alt={song.album}
-          className="w-32 h-32 rounded-2xl object-cover shadow-xl"
+          className="w-28 h-28 rounded-2xl object-cover shadow-xl shrink-0"
           onError={(e) => {
             (e.target as HTMLImageElement).src = '/default-cover.png';
           }}
@@ -280,7 +221,7 @@ function HeroSection({ song }: { song: Song }) {
           <p className="text-[10px] uppercase tracking-widest text-primary font-semibold mb-1">
             Now Playing
           </p>
-          <h1 className="text-2xl font-bold text-text mb-1">{song.title}</h1>
+          <h1 className="text-xl font-bold text-text mb-1 truncate max-w-xs">{song.title}</h1>
           <p className="text-sm text-text/50">
             {song.artist} — {song.album}
           </p>
@@ -290,82 +231,81 @@ function HeroSection({ song }: { song: Song }) {
   );
 }
 
-interface SectionHeaderProps {
-  icon: React.ElementType;
-  title: string;
-  onSeeAll?: () => void;
-}
-
-function SectionHeader({ icon: Icon, title, onSeeAll }: SectionHeaderProps) {
+function SectionHeader({ title, onSeeAll }: { title: string; onSeeAll?: () => void }) {
   return (
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <Icon size={18} className="text-primary" strokeWidth={1.8} />
-        <h2 className="text-lg font-bold text-text">{title}</h2>
-      </div>
+      <h2 className="text-xl font-bold text-text">{title}</h2>
       {onSeeAll && (
         <button
           onClick={onSeeAll}
-          className="text-xs text-text/40 hover:text-primary transition-colors font-medium"
+          className="text-xs text-text/40 hover:text-primary transition-colors font-semibold"
         >
-          See All
+          See all
         </button>
       )}
     </div>
   );
 }
 
-interface QuickPickCardProps {
-  song: Song;
+// ─── Playlist Card ───────────────────────────────────────
+
+interface PlaylistCardProps {
+  playlist: Playlist;
   onPlay: () => void;
-  isPlaying: boolean;
+  onClick: () => void;
 }
 
-function QuickPickCard({ song, onPlay, isPlaying }: QuickPickCardProps) {
-  const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : '/default-cover.png';
+function PlaylistCard({ playlist, onPlay, onClick }: PlaylistCardProps) {
+  const coverSrc = playlist.coverPath
+    ? `local-image://${encodeURIComponent(playlist.coverPath)}`
+    : null;
 
   return (
     <motion.div
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onPlay}
-      className={`flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors ${
-        isPlaying ? 'bg-primary/15 border border-primary/20' : 'glass hover:bg-white/5'
-      }`}
+      whileHover={{ scale: 1.03 }}
+      whileTap={{ scale: 0.97 }}
+      onClick={onClick}
+      className="group cursor-pointer shrink-0 w-44"
     >
-      <img
-        src={coverSrc}
-        alt={song.album}
-        className="w-12 h-12 rounded-lg object-cover"
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = '/default-cover.png';
-        }}
-      />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold truncate">{song.title}</p>
-        <p className="text-xs text-text/40 truncate">{song.artist}</p>
-      </div>
-      {isPlaying ? (
-        <div className="flex gap-0.5 items-end h-4">
-          {[1, 2, 3].map((i) => (
-            <motion.div
-              key={i}
-              className="w-0.5 bg-primary rounded-full"
-              animate={{ height: ['30%', '100%', '30%'] }}
-              transition={{
-                duration: 0.8,
-                repeat: Infinity,
-                delay: i * 0.15,
-              }}
-            />
-          ))}
+      <div className="relative rounded-xl overflow-hidden aspect-square mb-3 bg-white/[0.04] border border-white/5">
+        {coverSrc ? (
+          <img
+            src={coverSrc}
+            alt={playlist.name}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <ListMusic size={40} className="text-text/15" />
+          </div>
+        )}
+        {/* Play overlay */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-end justify-end p-3">
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlay();
+            }}
+            className="w-11 h-11 rounded-full bg-primary flex items-center justify-center shadow-glow opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-200"
+          >
+            <Play size={18} fill="currentColor" className="text-zinc-950 ml-0.5" />
+          </motion.button>
         </div>
-      ) : (
-        <Play size={14} className="text-text/30 shrink-0" />
-      )}
+      </div>
+      <p className="text-sm font-semibold truncate">{playlist.name}</p>
+      <p className="text-xs text-text/35 mt-0.5">
+        {playlist.songIds.length} song{playlist.songIds.length !== 1 ? 's' : ''}
+      </p>
     </motion.div>
   );
 }
+
+// ─── Song Card ───────────────────────────────────────────
 
 interface SongCardProps {
   song: Song;
@@ -381,9 +321,9 @@ function SongCard({ song, onPlay, isPlaying }: SongCardProps) {
       whileHover={{ scale: 1.03 }}
       whileTap={{ scale: 0.97 }}
       onClick={onPlay}
-      className="group cursor-pointer"
+      className="group cursor-pointer shrink-0 w-40"
     >
-      <div className="relative rounded-card overflow-hidden aspect-square mb-3">
+      <div className="relative rounded-xl overflow-hidden aspect-square mb-3 shadow-md">
         <img
           src={coverSrc}
           alt={song.album}
@@ -392,37 +332,34 @@ function SongCard({ song, onPlay, isPlaying }: SongCardProps) {
             (e.target as HTMLImageElement).src = '/default-cover.png';
           }}
         />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-end justify-end p-3">
           <motion.div
-            initial={{ scale: 0 }}
-            whileHover={{ scale: 1 }}
-            className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-glow-lg"
+            className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-glow opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-200"
           >
-            <Play size={20} fill="white" className="text-white ml-0.5" />
+            {isPlaying ? (
+              <div className="flex gap-0.5 items-end h-4 px-1">
+                {[1, 2, 3].map((i) => (
+                  <motion.div
+                    key={i}
+                    className="w-0.5 bg-zinc-950 rounded-full"
+                    animate={{ height: ['30%', '100%', '30%'] }}
+                    transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Play size={16} fill="currentColor" className="text-zinc-950 ml-0.5" />
+            )}
           </motion.div>
         </div>
-        {isPlaying && (
-          <div className="absolute bottom-2 right-2 flex gap-0.5 items-end h-4">
-            {[1, 2, 3].map((i) => (
-              <motion.div
-                key={i}
-                className="w-1 bg-primary rounded-full"
-                animate={{ height: ['30%', '100%', '30%'] }}
-                transition={{
-                  duration: 0.8,
-                  repeat: Infinity,
-                  delay: i * 0.15,
-                }}
-              />
-            ))}
-          </div>
-        )}
       </div>
       <p className="text-sm font-semibold truncate">{song.title}</p>
       <p className="text-xs text-text/40 truncate">{song.artist}</p>
     </motion.div>
   );
 }
+
+// ─── Album Card ──────────────────────────────────────────
 
 interface AlbumCardProps {
   album: Album;
@@ -438,9 +375,9 @@ function AlbumCard({ album, onPlay, onClick }: AlbumCardProps) {
       whileHover={{ scale: 1.03 }}
       whileTap={{ scale: 0.97 }}
       onClick={onClick}
-      className="group cursor-pointer"
+      className="group cursor-pointer shrink-0 w-40"
     >
-      <div className="relative rounded-card overflow-hidden aspect-square mb-3">
+      <div className="relative rounded-xl overflow-hidden aspect-square mb-3 shadow-md">
         <img
           src={coverSrc}
           alt={album.name}
@@ -449,7 +386,7 @@ function AlbumCard({ album, onPlay, onClick }: AlbumCardProps) {
             (e.target as HTMLImageElement).src = '/default-cover.png';
           }}
         />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-end justify-end p-3">
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -457,9 +394,9 @@ function AlbumCard({ album, onPlay, onClick }: AlbumCardProps) {
               e.stopPropagation();
               onPlay();
             }}
-            className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-glow-lg"
+            className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-glow opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-200"
           >
-            <Play size={20} fill="white" className="text-white ml-0.5" />
+            <Play size={16} fill="currentColor" className="text-zinc-950 ml-0.5" />
           </motion.button>
         </div>
       </div>
@@ -468,3 +405,6 @@ function AlbumCard({ album, onPlay, onClick }: AlbumCardProps) {
     </motion.div>
   );
 }
+
+// Import for Disc3 kept for future use
+export { Disc3 };

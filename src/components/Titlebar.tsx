@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Minus, Square, X, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
+import logoUrl from '@/assets/logo.png';
 
 export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false);
@@ -20,7 +21,7 @@ export function Titlebar() {
     <div className="drag-region h-9 flex items-center justify-between px-4 bg-transparent z-50 relative shrink-0">
       {/* App title */}
       <div className="flex items-center gap-2 no-drag">
-        <img src="/logo.png" className="w-4 h-4 object-contain" alt="" />
+        <img src={logoUrl} className="w-4 h-4 object-contain" alt="" />
         <span className="text-xs font-semibold text-text/70 tracking-wider uppercase">
           Archie
         </span>

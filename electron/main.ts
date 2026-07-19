@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -38,7 +39,7 @@ const ELECTRON_DIST = path.join(__dirname);
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
 function getDataPath(): string {
-  const dataPath = path.join(app.getPath('userData'), 'bluetune');
+  const dataPath = path.join(app.getPath('userData'), 'archie');
   if (!fs.existsSync(dataPath)) {
     fs.mkdirSync(dataPath, { recursive: true });
   }
@@ -247,6 +248,24 @@ function registerIpcHandlers(): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  // Image picker — copies chosen image to app data covers/ folder
+  ipcMain.handle('dialog:openImage', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      title: 'Select Playlist Cover Image',
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const src = result.filePaths[0];
+    const ext = path.extname(src);
+    const destDir = path.join(getDataPath(), 'covers');
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+    const destName = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 7)}${ext}`;
+    const destPath = path.join(destDir, destName);
+    fs.copyFileSync(src, destPath);
+    return destPath;
+  });
+
   // Data operations
   ipcMain.handle('data:read', async (_event, fileName: string) => {
     const filePath = path.join(getDataPath(), fileName);
@@ -323,6 +342,9 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   registerScannerIpc(getDataPath);
   createWindow();
+
+  // Check for updates automatically
+  autoUpdater.checkForUpdatesAndNotify();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
