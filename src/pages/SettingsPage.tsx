@@ -142,7 +142,7 @@ export function SettingsPage() {
             <img src="logo.png" className="w-5 h-5 object-contain" alt="" />
             <span className="text-sm font-bold tracking-wider">LocalSpo</span>
           </div>
-          <p className="text-xs text-text/30">Version 1.0.1</p>
+          <p className="text-xs text-text/30">Version 1.0.2</p>
         </div>
       </div>
     </div>
