@@ -13,20 +13,37 @@ interface ToastState {
   removeToast: (id: string) => void;
 }
 
+let activeTimeout: NodeJS.Timeout | null = null;
+
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   showToast: (message, type = 'success', duration = 2500) => {
-    const id = Math.random().toString(36).slice(2, 11);
-    set((state) => ({
-      toasts: [...state.toasts, { id, message, type, duration }],
-    }));
-    setTimeout(() => {
-      set((state) => ({
-        toasts: state.toasts.filter((t) => t.id !== id),
-      }));
-    }, duration);
+    if (activeTimeout) {
+      clearTimeout(activeTimeout);
+      activeTimeout = null;
+    }
+
+    set((state) => {
+      const existing = state.toasts[0];
+      const id = existing ? existing.id : Math.random().toString(36).slice(2, 11);
+
+      activeTimeout = setTimeout(() => {
+        useToastStore.setState((s) => ({
+          toasts: s.toasts.filter((t) => t.id !== id),
+        }));
+        activeTimeout = null;
+      }, duration);
+
+      return {
+        toasts: [{ id, message, type, duration }],
+      };
+    });
   },
   removeToast: (id) => {
+    if (activeTimeout) {
+      clearTimeout(activeTimeout);
+      activeTimeout = null;
+    }
     set((state) => ({
       toasts: state.toasts.filter((t) => t.id !== id),
     }));

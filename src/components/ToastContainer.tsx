@@ -23,6 +23,7 @@ export function ToastContainer() {
 
           return (
             <motion.div
+              layout
               key={toast.id}
               initial={{ opacity: 0, y: 24, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -31,7 +32,18 @@ export function ToastContainer() {
               className="flex items-center gap-2.5 px-5 py-3 rounded-full bg-zinc-900 border border-white/10 text-text shadow-2xl backdrop-blur-md pointer-events-auto select-none min-w-[240px] justify-center"
             >
               <Icon size={14} className={`${colorClass} shrink-0`} />
-              <span className="text-xs font-semibold tracking-wide">{toast.message}</span>
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={toast.message}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="text-xs font-semibold tracking-wide"
+                >
+                  {toast.message}
+                </motion.span>
+              </AnimatePresence>
             </motion.div>
           );
         })}

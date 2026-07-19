@@ -132,6 +132,7 @@ export function NowPlayingOverlay() {
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
   const { seekByLyricsEnabled } = useSettingsStore();
 
+  const showLyrics = true;
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -283,28 +284,13 @@ export function NowPlayingOverlay() {
             </motion.div>
             <span>Now Playing</span>
           </button>
-
-          <button
-            onClick={() => isFavoriteSong(currentSong.id)
-              ? toggleFavoriteSong(currentSong.id)
-              : toggleFavoriteSong(currentSong.id)
-            }
-            className="transition-all duration-200"
-          >
-            <motion.div
-              whileTap={{ scale: 0.85 }}
-              className={isFav ? 'text-red-400' : 'text-white/35 hover:text-white/60'}
-            >
-              <Heart size={20} fill={isFav ? 'currentColor' : 'none'} />
-            </motion.div>
-          </button>
         </div>
 
         {/* ════ Main Grid ════ */}
-        <div className="relative z-10 flex-1 flex min-h-0 px-10 pb-10 pt-2 gap-16">
+        <div className={`relative z-10 flex-1 flex min-h-0 px-10 pb-10 pt-2 gap-16 ${showLyrics ? '' : 'justify-center items-center'}`}>
 
-          {/* ── Left Panel (35%) ── */}
-          <div className="w-[35%] flex flex-col justify-center items-center gap-7 shrink-0">
+          {/* ── Left Panel (35% or 100% when lyrics are hidden) ── */}
+          <div className={`${showLyrics ? 'w-[35%]' : 'w-full max-w-[440px] mx-auto'} flex flex-col justify-center items-center gap-7 shrink-0 transition-all duration-300`}>
 
             {/* Album Artwork */}
             <AnimatePresence mode="wait">
@@ -338,26 +324,6 @@ export function NowPlayingOverlay() {
               </motion.div>
             </AnimatePresence>
 
-            {/* Song Info */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={`info-${currentSong.id}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.35 }}
-                className="w-full text-center space-y-1"
-              >
-                <h1 className="text-[22px] font-bold text-white leading-tight truncate px-2">
-                  {currentSong.title}
-                </h1>
-                <p className="text-white/55 text-base truncate px-2">{currentSong.artist}</p>
-                {currentSong.album && (
-                  <p className="text-white/30 text-sm truncate px-2">{currentSong.album}</p>
-                )}
-              </motion.div>
-            </AnimatePresence>
-
             {/* Progress */}
             <div className="w-full space-y-2">
               <Slider
@@ -371,6 +337,36 @@ export function NowPlayingOverlay() {
                 <span>-{formatTime(Math.max(0, duration - localTime))}</span>
               </div>
             </div>
+
+            {/* Song Info */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`info-${currentSong.id}`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.35 }}
+                className="w-full flex items-center justify-between px-2 gap-4"
+              >
+                <div className="flex-1 min-w-0 text-left">
+                  <h1 className="text-[22px] font-bold text-white leading-tight truncate">
+                    {currentSong.title}
+                  </h1>
+                  <p className="text-white/55 text-base truncate mt-0.5">{currentSong.artist}</p>
+                </div>
+                <button
+                  onClick={() => toggleFavoriteSong(currentSong.id)}
+                  className="transition-all duration-200 shrink-0"
+                >
+                  <motion.div
+                    whileTap={{ scale: 0.85 }}
+                    className={isFav ? 'text-primary' : 'text-white/35 hover:text-white/60'}
+                  >
+                    <Heart size={22} fill={isFav ? 'currentColor' : 'none'} />
+                  </motion.div>
+                </button>
+              </motion.div>
+            </AnimatePresence>
 
             {/* Playback Controls */}
             <div className="flex items-center justify-center gap-7">
@@ -440,99 +436,97 @@ export function NowPlayingOverlay() {
           </div>
 
           {/* ── Right Panel (65%) — Lyrics ── */}
-          <div className="flex-1 flex flex-col min-h-0 justify-center relative">
+          {showLyrics && (
+            <div className="flex-1 flex flex-col min-h-0 justify-center relative">
+              <div
+                ref={lyricsContainerRef}
+                className="flex-1 overflow-y-auto overflow-x-hidden relative"
+                style={{
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                }}
+              >
+                {/* Loading */}
+                {isLoadingLyrics && (
+                  <div className="flex flex-col items-center justify-center h-full gap-4 pt-8">
+                    <div className="flex items-center gap-2">
+                      {[0, 1, 2].map((i) => (
+                        <motion.div
+                          key={i}
+                          className="w-2 h-2 rounded-full bg-white/40"
+                          animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.3, 0.8] }}
+                          transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.22 }}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-white/25 text-sm tracking-wide">Searching lyrics...</p>
+                  </div>
+                )}
 
+                {/* Synced lyrics */}
+                {!isLoadingLyrics && lyrics?.synced && (
+                  <div className="pt-8 pb-[55vh] pl-2 pr-8 space-y-3">
+                    {lyrics.lines.map((line, idx) => {
+                      const isActive = idx === currentLyricIndex;
+                      const isPast = currentLyricIndex >= 0 && idx < currentLyricIndex;
 
-            <div
-              ref={lyricsContainerRef}
-              className="flex-1 overflow-y-auto overflow-x-hidden relative"
-              style={{
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
-              }}
-            >
+                      return (
+                        <div
+                          key={idx}
+                          ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
+                          onClick={() => {
+                            if (!seekByLyricsEnabled) return;
+                            console.log('[NowPlayingOverlay] Lyric clicked:', line.text, 'Seek to:', line.time);
+                            const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
+                            usePlayerStore.getState().setCurrentTime(seekTime);
+                            window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                          }}
+                          className={`px-5 py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
+                        >
+                          <motion.p
+                            animate={{
+                              fontSize: isActive ? '44px' : '28px',
+                              fontWeight: isActive ? 800 : 700,
+                              opacity: isActive ? 1 : isPast ? 0.35 : 0.5,
+                              color: '#ffffff',
+                            }}
+                            transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                            style={{ lineHeight: 1.25 }}
+                          >
+                            {line.text}
+                          </motion.p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
-              {/* Loading */}
-              {isLoadingLyrics && (
-                <div className="flex flex-col items-center justify-center h-full gap-4 pt-8">
-                  <div className="flex items-center gap-2">
-                    {[0, 1, 2].map((i) => (
-                      <motion.div
-                        key={i}
-                        className="w-2 h-2 rounded-full bg-white/40"
-                        animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.3, 0.8] }}
-                        transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.22 }}
-                      />
+                {/* Plain lyrics */}
+                {!isLoadingLyrics && lyrics && !lyrics.synced && (
+                  <div className="pt-10 pb-16 pl-2 pr-8 space-y-3">
+                    {lyrics.lines.map((line, idx) => (
+                      <p key={idx} className="text-[20px] font-medium text-white/50 leading-relaxed">
+                        {line.text || <>&nbsp;</>}
+                      </p>
                     ))}
                   </div>
-                  <p className="text-white/25 text-sm tracking-wide">Searching lyrics...</p>
-                </div>
-              )}
+                )}
 
-              {/* Synced lyrics */}
-              {!isLoadingLyrics && lyrics?.synced && (
-                <div className="pt-8 pb-[55vh] pl-2 pr-8 space-y-5">
-                  {lyrics.lines.map((line, idx) => {
-                    const isActive = idx === currentLyricIndex;
-                    const isPast = currentLyricIndex >= 0 && idx < currentLyricIndex;
-
-                    return (
-                      <div
-                        key={idx}
-                        ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
-                        onClick={() => {
-                          if (!seekByLyricsEnabled) return;
-                          console.log('[NowPlayingOverlay] Lyric clicked:', line.text, 'Seek to:', line.time);
-                          const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
-                          usePlayerStore.getState().setCurrentTime(seekTime);
-                          window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
-                        }}
-                        className={`${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
-                      >
-                        <motion.p
-                          animate={{
-                            fontSize: isActive ? '44px' : '28px',
-                            fontWeight: isActive ? 700 : 500,
-                            opacity: isActive ? 1 : isPast ? 0.22 : 0.38,
-                            color: '#ffffff',
-                          }}
-                          transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-                          style={{ lineHeight: 1.2 }}
-                        >
-                          {line.text}
-                        </motion.p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Plain lyrics */}
-              {!isLoadingLyrics && lyrics && !lyrics.synced && (
-                <div className="pt-10 pb-16 pl-2 pr-8 space-y-3">
-                  {lyrics.lines.map((line, idx) => (
-                    <p key={idx} className="text-[20px] font-medium text-white/50 leading-relaxed">
-                      {line.text || <>&nbsp;</>}
-                    </p>
-                  ))}
-                </div>
-              )}
-
-              {/* Empty state */}
-              {!isLoadingLyrics && !lyrics && (
-                <div className="flex flex-col items-start justify-center h-full pl-2 gap-5">
-                  <div className="text-6xl">🎤</div>
-                  <div>
-                    <p className="text-[28px] font-semibold text-white/30">No lyrics available</p>
-                    <p className="text-white/18 text-base mt-2">
-                      {currentSong.artist} — {currentSong.title}
-                    </p>
+                {/* Empty state */}
+                {!isLoadingLyrics && !lyrics && (
+                  <div className="flex flex-col items-start justify-center h-full pl-2 gap-5">
+                    <div className="text-6xl">🎤</div>
+                    <div>
+                      <p className="text-[28px] font-semibold text-white/30">No lyrics available</p>
+                      <p className="text-white/18 text-base mt-2">
+                        {currentSong.artist} — {currentSong.title}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
-
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
       </motion.div>

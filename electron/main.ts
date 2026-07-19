@@ -39,7 +39,7 @@ const ELECTRON_DIST = path.join(__dirname);
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
 function getDataPath(): string {
-  const dataPath = path.join(app.getPath('userData'), 'archie');
+  const dataPath = path.join(app.getPath('userData'), 'localspo');
   if (!fs.existsSync(dataPath)) {
     fs.mkdirSync(dataPath, { recursive: true });
   }
@@ -95,7 +95,7 @@ function createWindow(): void {
       sandbox: false,
       webSecurity: true,
     },
-    icon: path.join(DIST, 'icon.png'),
+    icon: path.join(DIST, 'logo.png'),
   });
 
   mainWindow.once('ready-to-show', () => {

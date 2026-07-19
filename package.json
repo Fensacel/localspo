@@ -1,9 +1,9 @@
 {
-  "name": "archie",
+  "name": "localspo",
   "version": "1.0.0",
   "description": "Premium Desktop Local Music Player",
   "main": "dist-electron/main.js",
-  "author": "Archie",
+  "author": "LocalSpo",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -55,8 +55,8 @@
     "vite-plugin-electron-renderer": "^1.0.0"
   },
   "build": {
-  "appId": "com.archie.app",
-  "productName": "Archie",
+  "appId": "com.localspo.app",
+  "productName": "LocalSpo",
 
   "directories": {
     "output": "release"
@@ -72,7 +72,7 @@
 
   "win": {
     "target": "nsis",
-    "icon": "public/icon.png"
+    "icon": "public/logo.png"
   },
 
   "nsis": {

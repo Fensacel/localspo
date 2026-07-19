@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Song, RepeatMode, ShuffleMode } from '@/types';
+import { useToastStore } from './useToastStore';
 
 interface PlayerState {
   // Current playback
@@ -253,7 +254,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set((state) => {
       const modes: RepeatMode[] = ['off', 'all', 'one'];
       const currentIndex = modes.indexOf(state.repeatMode);
-      return { repeatMode: modes[(currentIndex + 1) % modes.length] };
+      const nextMode = modes[(currentIndex + 1) % modes.length];
+      
+      let msg = '';
+      if (nextMode === 'off') msg = 'Repeat off';
+      else if (nextMode === 'all') msg = 'Repeat all songs';
+      else if (nextMode === 'one') msg = 'Repeat one song';
+      useToastStore.getState().showToast(msg, 'info');
+
+      return { repeatMode: nextMode };
     }),
 
   toggleShuffle: () =>
@@ -263,6 +272,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const rest = state.queue.filter((s) => s.id !== currentSong?.id);
         const shuffledRest = shuffleArray(rest);
         const newQueue = currentSong ? [currentSong, ...shuffledRest] : shuffledRest;
+        
+        useToastStore.getState().showToast('Shuffle on', 'info');
+
         return {
           shuffleMode: 'on',
           queue: newQueue,
@@ -273,6 +285,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const originalIndex = currentSong
           ? state.originalQueue.findIndex((s) => s.id === currentSong.id)
           : 0;
+          
+        useToastStore.getState().showToast('Shuffle off', 'info');
+
         return {
           shuffleMode: 'off',
           queue: [...state.originalQueue],

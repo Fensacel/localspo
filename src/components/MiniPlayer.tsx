@@ -14,8 +14,8 @@ import {
   Volume1,
   ListMusic,
   Mic2,
-  ChevronUp,
   PanelRight,
+  Maximize2,
 } from 'lucide-react';
 import { useRef, useState, useEffect } from 'react';
 
@@ -195,7 +195,6 @@ export function MiniPlayer() {
             <p className="text-sm font-semibold text-text truncate">{currentSong.title}</p>
             <p className="text-xs text-text/50 truncate">{currentSong.artist}</p>
           </div>
-          <ChevronUp size={16} className="text-text/30 shrink-0" />
         </div>
 
         {/* Center controls */}
@@ -264,7 +263,7 @@ export function MiniPlayer() {
             <Mic2 size={15} strokeWidth={1.8} />
           </ControlButton>
 
-          <ControlButton onClick={toggleQueue} size="sm">
+          <ControlButton onClick={toggleQueue} size="sm" title="Queue">
             <ListMusic size={15} strokeWidth={1.8} />
           </ControlButton>
 
@@ -288,6 +287,10 @@ export function MiniPlayer() {
               />
             </div>
           </div>
+
+          <ControlButton onClick={toggleNowPlaying} size="sm" title="Fullscreen">
+            <Maximize2 size={15} strokeWidth={1.8} />
+          </ControlButton>
         </div>
       </div>
     </motion.div>
@@ -299,13 +302,15 @@ interface ControlButtonProps {
   onClick: () => void;
   active?: boolean;
   size?: 'sm' | 'md';
+  title?: string;
 }
 
-function ControlButton({ children, onClick, active = false, size = 'md' }: ControlButtonProps) {
+function ControlButton({ children, onClick, active = false, size = 'md', title }: ControlButtonProps) {
   return (
     <motion.button
       whileTap={{ scale: 0.9 }}
       onClick={onClick}
+      title={title}
       className={`flex items-center justify-center rounded-full transition-colors duration-200 ${
         size === 'sm' ? 'w-8 h-8' : 'w-9 h-9'
       } ${

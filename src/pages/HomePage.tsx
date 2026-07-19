@@ -174,7 +174,7 @@ function EmptyLibrary() {
       </motion.div>
       <h2 className="text-2xl font-bold text-text mb-2">No Music Yet</h2>
       <p className="text-text/40 mb-6 max-w-sm">
-        Add a music folder to start building your library. Archie will scan and organize everything
+        Add a music folder to start building your library. LocalSpo will scan and organize everything
         for you.
       </p>
       <motion.button

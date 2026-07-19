@@ -9,7 +9,6 @@ import {
   Plus,
   RefreshCw,
 } from 'lucide-react';
-import logoUrl from '@/assets/logo.png';
 
 export function SettingsPage() {
   const {
@@ -140,8 +139,8 @@ export function SettingsPage() {
         {/* About */}
         <div className="glass rounded-2xl p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <img src={logoUrl} className="w-5 h-5 object-contain" alt="" />
-            <span className="text-sm font-bold tracking-wider">Archie</span>
+            <img src="logo.png" className="w-5 h-5 object-contain" alt="" />
+            <span className="text-sm font-bold tracking-wider">LocalSpo</span>
           </div>
           <p className="text-xs text-text/30">Version 1.0.0</p>
         </div>
