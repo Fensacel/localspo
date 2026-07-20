@@ -27,7 +27,8 @@ export function HomePage() {
   const navigate = useNavigate();
   const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
 
-  const recentlyAdded = [...songs].sort((a, b) => b.addedAt - a.addedAt).slice(0, 10);
+  const allRecentlyAdded = [...songs].sort((a, b) => b.addedAt - a.addedAt);
+  const recentlyAdded = allRecentlyAdded.slice(0, 10);
   const topAlbums = albums.slice(0, 10);
   const topArtists = artists.slice(0, 10);
 
@@ -36,8 +37,8 @@ export function HomePage() {
       setIsPlaying(!isPlaying);
       window.dispatchEvent(new CustomEvent('player:toggle'));
     } else {
-      const idx = recentlyAdded.findIndex((s) => s.id === song.id);
-      setQueue(recentlyAdded, idx >= 0 ? idx : 0, 'Recently Added');
+      const idx = allRecentlyAdded.findIndex((s) => s.id === song.id);
+      setQueue(allRecentlyAdded, idx >= 0 ? idx : 0, 'Recently Added');
     }
   };
 

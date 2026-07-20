@@ -57,7 +57,8 @@ export function HistoryPage() {
   };
 
   const handlePlayStatsSong = (song: Song) => {
-    setQueue([song], 0, 'Most Played');
+    const index = statsSongs.findIndex((s) => s.id === song.id);
+    setQueue(statsSongs, index >= 0 ? index : 0, 'Most Played');
   };
 
   const formatPlayedAt = (timestamp: number) => {

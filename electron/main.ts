@@ -337,6 +337,36 @@ function registerIpcHandlers(): void {
   ipcMain.handle('app:getDataPath', () => getDataPath());
   ipcMain.handle('app:getUserDataPath', () => app.getPath('userData'));
 
+  // Data persistence
+  ipcMain.handle('data:read', async (_event, fileName: string) => {
+    try {
+      const safeFileName = path.basename(fileName);
+      const filePath = path.join(getDataPath(), safeFileName);
+      if (!fs.existsSync(filePath)) return null;
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(content);
+    } catch (err) {
+      console.error(`Error reading data file ${fileName}:`, err);
+      return null;
+    }
+  });
+
+  ipcMain.handle('data:write', async (_event, fileName: string, data: unknown) => {
+    try {
+      const dataPath = getDataPath();
+      if (!fs.existsSync(dataPath)) {
+        fs.mkdirSync(dataPath, { recursive: true });
+      }
+      const safeFileName = path.basename(fileName);
+      const filePath = path.join(dataPath, safeFileName);
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+      return true;
+    } catch (err) {
+      console.error(`Error writing data file ${fileName}:`, err);
+      return false;
+    }
+  });
+
   // File operations
   ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
     if (!fs.existsSync(filePath)) return null;
