@@ -29,7 +29,7 @@ export function SettingsPage() {
     removeMusicFolder,
   } = useSettingsStore();
 
-  const [appVersion, setAppVersion] = useState<string>('1.0.3');
+  const [appVersion, setAppVersion] = useState<string>('1.0.4');
   const [updateStatus, setUpdateStatus] = useState<{ status: string; version?: string; percent?: number; error?: string } | null>(null);
 
   useEffect(() => {

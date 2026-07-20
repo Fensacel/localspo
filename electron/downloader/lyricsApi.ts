@@ -22,7 +22,7 @@ export class LyricsApi {
 
       const res = await fetch(url, {
         headers: {
-          'User-Agent': 'LocalSpo-MusicPlayer/1.0.3',
+          'User-Agent': 'LocalSpo-MusicPlayer/1.0.4',
         },
       });
 
@@ -41,7 +41,7 @@ export class LyricsApi {
       const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(`${cleanArtist} ${cleanTitle}`)}`;
       const searchRes = await fetch(searchUrl, {
         headers: {
-          'User-Agent': 'LocalSpo-MusicPlayer/1.0.3',
+          'User-Agent': 'LocalSpo-MusicPlayer/1.0.4',
         },
       });
 
