@@ -2,6 +2,8 @@ import { ipcMain, BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { getBinaryPaths } from './downloader/binaryManager';
+import { AudioTagger } from './downloader/tagger';
 
 const SUPPORTED_EXTENSIONS = new Set([
   '.flac', '.mp3', '.aac', '.alac', '.wav', '.aiff', '.ogg', '.m4a',
@@ -106,7 +108,14 @@ async function scanDirectory(dirPath: string): Promise<string[]> {
         await walk(fullPath);
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).toLowerCase();
-        if (SUPPORTED_EXTENSIONS.has(ext)) {
+        const lowerName = entry.name.toLowerCase();
+        if (
+          SUPPORTED_EXTENSIONS.has(ext) &&
+          !lowerName.includes('_temp_') &&
+          !lowerName.includes('_tagged_') &&
+          !lowerName.startsWith('.') &&
+          !lowerName.endsWith('.tmp')
+        ) {
           results.push(fullPath);
         }
       }
@@ -230,7 +239,7 @@ export function registerScannerIpc(getDataPath: () => string): void {
 
       // Read existing library
       const libraryPath = path.join(dataPath, 'library.json');
-      let library: { songs: unknown[]; albums: unknown[]; artists: unknown[]; lastScan: number | null } = {
+      let library: { songs: Record<string, unknown>[]; albums: unknown[]; artists: unknown[]; lastScan: number | null } = {
         songs: [], albums: [], artists: [], lastScan: null,
       };
       if (fs.existsSync(libraryPath)) {
@@ -241,23 +250,21 @@ export function registerScannerIpc(getDataPath: () => string): void {
         }
       }
 
-      const existingHashes = new Set(
-        (library.songs as Array<{ hash: string }>).map((s) => s.hash),
-      );
-
-      const songs: Array<Record<string, unknown>> = [...(library.songs as Array<Record<string, unknown>>)];
-      const albumMap = new Map<string, Record<string, unknown>>();
-      const artistMap = new Map<string, Record<string, unknown>>();
-
-      // Reconstruct existing maps
-      for (const album of library.albums as Array<Record<string, unknown>>) {
-        albumMap.set(album['id'] as string, album);
-      }
-      for (const artist of library.artists as Array<Record<string, unknown>>) {
-        artistMap.set(artist['id'] as string, artist);
+      // Map valid existing songs by path
+      const songMapByPath = new Map<string, Record<string, unknown>>();
+      if (Array.isArray(library.songs)) {
+        for (const s of library.songs) {
+          const p = s['path'] as string;
+          if (p && fs.existsSync(p)) {
+            const lower = p.toLowerCase();
+            if (!lower.includes('_temp_') && !lower.includes('_tagged_') && !lower.endsWith('.tmp')) {
+              songMapByPath.set(p, s);
+            }
+          }
+        }
       }
 
-      // Process new files
+      // Process scanned files
       let processed = 0;
       for (const filePath of files) {
         processed++;
@@ -273,23 +280,7 @@ export function registerScannerIpc(getDataPath: () => string): void {
         const meta = await readMetadata(filePath, dataPath);
         if (!meta) continue;
 
-        // Skip duplicates
-        if (existingHashes.has(meta.hash)) continue;
-        existingHashes.add(meta.hash);
-
         const songId = meta.hash;
-
-        // Create album ID
-        const albumKey = `${meta.album.toLowerCase()}::${meta.albumArtist.toLowerCase()}`;
-        const albumId = crypto.createHash('md5').update(albumKey).digest('hex').slice(0, 12);
-
-        // Create artist ID
-        const artistKey = `artist::${meta.artist.toLowerCase()}`;
-        const artistId = crypto.createHash('md5').update(artistKey).digest('hex').slice(0, 12);
-
-        // Create album artist ID
-        const albumArtistKey = `artist::${meta.albumArtist.toLowerCase()}`;
-        const albumArtistId = crypto.createHash('md5').update(albumArtistKey).digest('hex').slice(0, 12);
 
         // Save embedded lyrics to cache
         if (meta.embeddedLyrics) {
@@ -304,11 +295,18 @@ export function registerScannerIpc(getDataPath: () => string): void {
         if (meta.coverData) {
           const ext = meta.coverData.format.includes('png') ? 'png' : 'jpg';
           coverPath = path.join(dataPath, 'cache', 'cover', `${meta.hash}.${ext}`);
+          const coverDir = path.dirname(coverPath);
+          if (!fs.existsSync(coverDir)) fs.mkdirSync(coverDir, { recursive: true });
+          try {
+            fs.writeFileSync(coverPath, meta.coverData.data);
+          } catch {}
         } else {
           coverPath = findCoverFile(meta.path);
         }
 
-        const song = {
+        const existingSong = songMapByPath.get(filePath);
+
+        const songObj = {
           id: songId,
           title: meta.title,
           artist: meta.artist,
@@ -331,35 +329,89 @@ export function registerScannerIpc(getDataPath: () => string): void {
           hasEmbeddedCover: meta.coverData !== null,
           hasEmbeddedLyrics: meta.embeddedLyrics !== null,
           lrcPath: meta.lrcPath,
-          addedAt: Date.now(),
-          playCount: 0,
+          addedAt: (existingSong?.addedAt as number) || Date.now(),
+          playCount: (existingSong?.playCount as number) || 0,
         };
 
-        songs.push(song);
+        songMapByPath.set(filePath, songObj);
+      }
+
+      const rawSongs = Array.from(songMapByPath.values());
+      const uniqueSongMap = new Map<string, Record<string, unknown>>();
+
+      for (const song of rawSongs) {
+        const title = ((song['title'] as string) || '').toLowerCase().trim();
+        const artist = ((song['artist'] as string) || '').toLowerCase().trim();
+        const key = `${artist}::${title}`;
+
+        if (!uniqueSongMap.has(key)) {
+          uniqueSongMap.set(key, song);
+        } else {
+          const existing = uniqueSongMap.get(key)!;
+          const hasCoverExisting = !!existing['coverPath'];
+          const hasCoverNew = !!song['coverPath'];
+
+          if (!hasCoverExisting && hasCoverNew) {
+            uniqueSongMap.set(key, song);
+          } else if (hasCoverExisting === hasCoverNew) {
+            const bitrateExisting = (existing['bitrate'] as number) || 0;
+            const bitrateNew = (song['bitrate'] as number) || 0;
+            if (bitrateNew >= bitrateExisting) {
+              uniqueSongMap.set(key, song);
+            }
+          }
+        }
+      }
+
+      const allSongs = Array.from(uniqueSongMap.values());
+      const albumMap = new Map<string, Record<string, unknown>>();
+      const artistMap = new Map<string, Record<string, unknown>>();
+
+      // Rebuild album and artist maps from all clean songs
+      for (const song of allSongs) {
+        const songId = song['id'] as string;
+        const albumTitle = (song['album'] as string) || 'Unknown Album';
+        const albumArtist = (song['albumArtist'] as string) || (song['artist'] as string) || 'Unknown Artist';
+        const songArtist = (song['artist'] as string) || 'Unknown Artist';
+        const coverPath = (song['coverPath'] as string | null) || null;
+        const duration = (song['duration'] as number) || 0;
+        const disc = (song['disc'] as number) || 1;
+
+        // Album ID
+        const albumKey = `${albumTitle.toLowerCase()}::${albumArtist.toLowerCase()}`;
+        const albumId = crypto.createHash('md5').update(albumKey).digest('hex').slice(0, 12);
+
+        // Artist ID
+        const artistKey = `artist::${songArtist.toLowerCase()}`;
+        const artistId = crypto.createHash('md5').update(artistKey).digest('hex').slice(0, 12);
+
+        // Album Artist ID
+        const albumArtistKey = `artist::${albumArtist.toLowerCase()}`;
+        const albumArtistId = crypto.createHash('md5').update(albumArtistKey).digest('hex').slice(0, 12);
 
         // Update album map
         if (!albumMap.has(albumId)) {
           albumMap.set(albumId, {
             id: albumId,
-            name: meta.album,
-            artist: meta.albumArtist,
-            albumArtist: meta.albumArtist,
-            year: meta.year,
-            genre: meta.genre,
+            name: albumTitle,
+            artist: albumArtist,
+            albumArtist: albumArtist,
+            year: song['year'],
+            genre: song['genre'],
             coverPath,
             songIds: [songId],
-            totalDuration: meta.duration,
+            totalDuration: duration,
             trackCount: 1,
-            discCount: meta.disc,
+            discCount: disc,
           });
         } else {
           const existing = albumMap.get(albumId)!;
           const songIds = existing['songIds'] as string[];
           if (!songIds.includes(songId)) {
             songIds.push(songId);
-            existing['totalDuration'] = (existing['totalDuration'] as number) + meta.duration;
+            existing['totalDuration'] = (existing['totalDuration'] as number) + duration;
             existing['trackCount'] = songIds.length;
-            existing['discCount'] = Math.max(existing['discCount'] as number, meta.disc);
+            existing['discCount'] = Math.max(existing['discCount'] as number, disc);
             if (!existing['coverPath'] && coverPath) existing['coverPath'] = coverPath;
           }
         }
@@ -368,8 +420,8 @@ export function registerScannerIpc(getDataPath: () => string): void {
         if (!artistMap.has(artistId)) {
           artistMap.set(artistId, {
             id: artistId,
-            name: meta.artist,
-            coverPath: coverPath,
+            name: songArtist,
+            coverPath,
             albumIds: [albumId],
             songIds: [songId],
             totalSongs: 1,
@@ -389,11 +441,10 @@ export function registerScannerIpc(getDataPath: () => string): void {
           }
         }
 
-        // Handle albumArtist if different from artist
         if (albumArtistId !== artistId && !artistMap.has(albumArtistId)) {
           artistMap.set(albumArtistId, {
             id: albumArtistId,
-            name: meta.albumArtist,
+            name: albumArtist,
             coverPath,
             albumIds: [albumId],
             songIds: [songId],
@@ -404,24 +455,24 @@ export function registerScannerIpc(getDataPath: () => string): void {
       }
 
       // Save library
-      library = {
-        songs,
+      const newLibrary = {
+        songs: allSongs,
         albums: Array.from(albumMap.values()),
         artists: Array.from(artistMap.values()),
         lastScan: Date.now(),
       };
 
-      fs.writeFileSync(libraryPath, JSON.stringify(library, null, 2), 'utf-8');
+      fs.writeFileSync(libraryPath, JSON.stringify(newLibrary, null, 2), 'utf-8');
 
       mainWindow?.webContents.send('scanner:progress', {
         status: 'done',
-        message: `Scan complete! ${songs.length} songs in library.`,
+        message: `Scan complete! ${allSongs.length} songs in library.`,
         totalFiles: files.length,
         processedFiles: files.length,
         currentFile: '',
       });
 
-      return library;
+      return newLibrary;
     } catch (err) {
       mainWindow?.webContents.send('scanner:progress', {
         status: 'error',
@@ -439,7 +490,53 @@ export function registerScannerIpc(getDataPath: () => string): void {
     const libraryPath = path.join(getDataPath(), 'library.json');
     if (!fs.existsSync(libraryPath)) return null;
     try {
-      return JSON.parse(fs.readFileSync(libraryPath, 'utf-8'));
+      const data = JSON.parse(fs.readFileSync(libraryPath, 'utf-8'));
+      if (data && Array.isArray(data.songs)) {
+        const validSongs = data.songs.filter((song: any) => {
+          if (!song.path || !fs.existsSync(song.path)) return false;
+          const lower = song.path.toLowerCase();
+          if (lower.includes('_temp_') || lower.includes('_tagged_') || lower.endsWith('.tmp')) return false;
+          return true;
+        });
+
+        // Deduplicate valid songs by artist + title
+        const deduplicatedMap = new Map<string, any>();
+        for (const song of validSongs) {
+          const title = (song.title || '').toLowerCase().trim();
+          const artist = (song.artist || '').toLowerCase().trim();
+          const key = `${artist}::${title}`;
+
+          if (!deduplicatedMap.has(key)) {
+            deduplicatedMap.set(key, song);
+          } else {
+            const existing = deduplicatedMap.get(key);
+            const hasCoverExisting = !!existing.coverPath;
+            const hasCoverNew = !!song.coverPath;
+
+            if (!hasCoverExisting && hasCoverNew) {
+              deduplicatedMap.set(key, song);
+            } else if (hasCoverExisting === hasCoverNew) {
+              const bitrateExisting = existing.bitrate || 0;
+              const bitrateNew = song.bitrate || 0;
+              if (bitrateNew >= bitrateExisting) {
+                deduplicatedMap.set(key, song);
+              }
+            }
+          }
+        }
+
+        const cleanSongs = Array.from(deduplicatedMap.values());
+
+        if (cleanSongs.length !== data.songs.length) {
+          data.songs = cleanSongs;
+          try {
+            fs.writeFileSync(libraryPath, JSON.stringify(data, null, 2), 'utf-8');
+          } catch (e) {
+            console.warn('Failed cleaning library.json:', e);
+          }
+        }
+      }
+      return data;
     } catch {
       return null;
     }
@@ -489,6 +586,200 @@ export function registerScannerIpc(getDataPath: () => string): void {
     }
 
     return null;
+  });
+
+  // Update song tags & metadata
+  ipcMain.handle('scanner:updateTags', async (_event, payload: {
+    songId: string;
+    filePath: string;
+    title: string;
+    artist: string;
+    album: string;
+    albumArtist?: string;
+    year?: number;
+    genre?: string;
+    coverPath?: string | null;
+    lyrics?: string | null;
+  }) => {
+    const dataPath = getDataPath();
+    const binaries = getBinaryPaths(() => dataPath);
+
+    if (!payload.filePath || !fs.existsSync(payload.filePath)) {
+      throw new Error('Audio file not found');
+    }
+
+    try {
+      // 1. Embed tags using AudioTagger
+      await AudioTagger.embedTags(payload.filePath, binaries.ffmpeg, {
+        title: payload.title,
+        artist: payload.artist,
+        album: payload.album,
+        coverPath: payload.coverPath || null,
+        lyrics: payload.lyrics || null,
+      });
+
+      // 2. Read updated metadata
+      const meta = await readMetadata(payload.filePath, dataPath);
+
+      // 3. Update library.json
+      const libraryPath = path.join(dataPath, 'library.json');
+      if (fs.existsSync(libraryPath)) {
+        const library = JSON.parse(fs.readFileSync(libraryPath, 'utf-8'));
+        if (library && Array.isArray(library.songs)) {
+          let updatedCoverPath = payload.coverPath || null;
+
+          if (meta && meta.coverData) {
+            const ext = meta.coverData.format.includes('png') ? 'png' : 'jpg';
+            const cacheCoverPath = path.join(dataPath, 'cache', 'cover', `${meta.hash}.${ext}`);
+            const coverDir = path.dirname(cacheCoverPath);
+            if (!fs.existsSync(coverDir)) fs.mkdirSync(coverDir, { recursive: true });
+            try {
+              fs.writeFileSync(cacheCoverPath, meta.coverData.data);
+              updatedCoverPath = cacheCoverPath;
+            } catch {}
+          }
+
+          const songIndex = library.songs.findIndex(
+            (s: any) => s.id === payload.songId || s.path === payload.filePath,
+          );
+
+          const updatedSong = {
+            ...(songIndex >= 0 ? library.songs[songIndex] : {}),
+            id: meta ? meta.hash : payload.songId,
+            title: payload.title,
+            artist: payload.artist,
+            album: payload.album,
+            albumArtist: payload.albumArtist || payload.artist,
+            genre: payload.genre || '',
+            year: payload.year || 0,
+            path: payload.filePath,
+            coverPath: updatedCoverPath,
+            hasEmbeddedCover: !!updatedCoverPath,
+            hasEmbeddedLyrics: !!payload.lyrics,
+          };
+
+          if (songIndex >= 0) {
+            library.songs[songIndex] = updatedSong;
+          } else {
+            library.songs.push(updatedSong);
+          }
+
+          // Rebuild albums and artists maps
+          const albumMap = new Map<string, Record<string, unknown>>();
+          const artistMap = new Map<string, Record<string, unknown>>();
+
+          for (const song of library.songs as Array<Record<string, unknown>>) {
+            const songId = song['id'] as string;
+            const albumTitle = (song['album'] as string) || 'Unknown Album';
+            const albumArtist = (song['albumArtist'] as string) || (song['artist'] as string) || 'Unknown Artist';
+            const songArtist = (song['artist'] as string) || 'Unknown Artist';
+            const coverPath = (song['coverPath'] as string | null) || null;
+            const duration = (song['duration'] as number) || 0;
+            const disc = (song['disc'] as number) || 1;
+
+            // Album ID
+            const albumKey = `${albumTitle.toLowerCase()}::${albumArtist.toLowerCase()}`;
+            const albumId = crypto.createHash('md5').update(albumKey).digest('hex').slice(0, 12);
+
+            // Artist ID
+            const artistKey = `artist::${songArtist.toLowerCase()}`;
+            const artistId = crypto.createHash('md5').update(artistKey).digest('hex').slice(0, 12);
+
+            // Album Artist ID
+            const albumArtistKey = `artist::${albumArtist.toLowerCase()}`;
+            const albumArtistId = crypto.createHash('md5').update(albumArtistKey).digest('hex').slice(0, 12);
+
+            // Update album map
+            if (!albumMap.has(albumId)) {
+              albumMap.set(albumId, {
+                id: albumId,
+                name: albumTitle,
+                artist: albumArtist,
+                albumArtist: albumArtist,
+                year: song['year'],
+                genre: song['genre'],
+                coverPath,
+                songIds: [songId],
+                totalDuration: duration,
+                trackCount: 1,
+                discCount: disc,
+              });
+            } else {
+              const existing = albumMap.get(albumId)!;
+              const songIds = existing['songIds'] as string[];
+              if (!songIds.includes(songId)) {
+                songIds.push(songId);
+                existing['totalDuration'] = (existing['totalDuration'] as number) + duration;
+                existing['trackCount'] = songIds.length;
+                existing['discCount'] = Math.max(existing['discCount'] as number, disc);
+                if (!existing['coverPath'] && coverPath) existing['coverPath'] = coverPath;
+              }
+            }
+
+            // Update artist map
+            if (!artistMap.has(artistId)) {
+              artistMap.set(artistId, {
+                id: artistId,
+                name: songArtist,
+                coverPath,
+                albumIds: [albumId],
+                songIds: [songId],
+                totalSongs: 1,
+                totalAlbums: 1,
+              });
+            } else {
+              const existing = artistMap.get(artistId)!;
+              const songIds = existing['songIds'] as string[];
+              const albumIds = existing['albumIds'] as string[];
+              if (!songIds.includes(songId)) {
+                songIds.push(songId);
+                existing['totalSongs'] = songIds.length;
+              }
+              if (!albumIds.includes(albumId)) {
+                albumIds.push(albumId);
+                existing['totalAlbums'] = albumIds.length;
+              }
+            }
+
+            if (albumArtistId !== artistId && !artistMap.has(albumArtistId)) {
+              artistMap.set(albumArtistId, {
+                id: albumArtistId,
+                name: albumArtist,
+                coverPath,
+                albumIds: [albumId],
+                songIds: [songId],
+                totalSongs: 1,
+                totalAlbums: 1,
+              });
+            }
+          }
+
+          const newLibrary = {
+            songs: library.songs,
+            albums: Array.from(albumMap.values()),
+            artists: Array.from(artistMap.values()),
+            lastScan: Date.now(),
+          };
+
+          fs.writeFileSync(libraryPath, JSON.stringify(newLibrary, null, 2), 'utf-8');
+
+          // Save lyrics cache if present
+          if (payload.lyrics) {
+            const lyricsDir = path.join(dataPath, 'cache', 'lyrics');
+            if (!fs.existsSync(lyricsDir)) fs.mkdirSync(lyricsDir, { recursive: true });
+            const lyricId = meta ? meta.hash : payload.songId;
+            fs.writeFileSync(path.join(lyricsDir, `${lyricId}.txt`), payload.lyrics, 'utf-8');
+            fs.writeFileSync(path.join(lyricsDir, `${payload.songId}.txt`), payload.lyrics, 'utf-8');
+          }
+
+          return { success: true, updatedSong, library: newLibrary };
+        }
+      }
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error updating song tags:', err);
+      throw err;
+    }
   });
 }
 

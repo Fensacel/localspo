@@ -23,6 +23,20 @@ interface LibraryState {
   getArtistSongs: (artistId: string) => Song[];
   getArtistAlbums: (artistId: string) => Album[];
   getRecentlyAdded: (limit?: number) => Song[];
+  updateSongTags: (
+    songId: string,
+    payload: {
+      path: string;
+      title: string;
+      artist: string;
+      album: string;
+      albumArtist?: string;
+      year?: number;
+      genre?: string;
+      coverPath?: string | null;
+      lyrics?: string | null;
+    },
+  ) => Promise<boolean>;
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
@@ -88,5 +102,49 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   getRecentlyAdded: (limit = 20) => {
     return [...get().songs].sort((a, b) => b.addedAt - a.addedAt).slice(0, limit);
+  },
+
+  updateSongTags: async (songId, payload) => {
+    if (window.electronAPI?.scanner?.updateTags) {
+      try {
+        const res: any = await window.electronAPI.scanner.updateTags({
+          songId,
+          filePath: payload.path,
+          title: payload.title,
+          artist: payload.artist,
+          album: payload.album,
+          albumArtist: payload.albumArtist,
+          year: payload.year,
+          genre: payload.genre,
+          coverPath: payload.coverPath,
+          lyrics: payload.lyrics,
+        });
+
+        if (res?.success) {
+          const freshData: any = res.library || (await window.electronAPI.scanner.getLibrary());
+          if (freshData) {
+            get().setLibraryData(freshData);
+          }
+
+          // Sync current playing song if edited
+          const { usePlayerStore } = await import('./usePlayerStore');
+          const playerState = usePlayerStore.getState();
+          if (
+            playerState.currentSong &&
+            (playerState.currentSong.id === songId || playerState.currentSong.path === payload.path)
+          ) {
+            const updated = res.updatedSong || get().songs.find((s) => s.path === payload.path);
+            if (updated) {
+              playerState.setCurrentSong({ ...playerState.currentSong, ...updated });
+            }
+          }
+
+          return true;
+        }
+      } catch (err) {
+        console.error('Failed to update song tags:', err);
+      }
+    }
+    return false;
   },
 }));

@@ -6,6 +6,8 @@ import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import type { Song } from '@/types';
 import { OverflowMarqueeText } from '@/components/OverflowMarqueeText';
 import { SongContextMenu } from '@/components/SongContextMenu';
+import { EditSongModal } from '@/components/EditSongModal';
+import { SongDetailsModal } from '@/components/SongDetailsModal';
 
 export function SongsPage() {
   const { songs } = useLibraryStore();
@@ -299,6 +301,8 @@ function SongRow({ song, index, gridTemplateColumns, isActive, isPlaying, onPlay
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
   const isFav = isFavoriteSong(song.id);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [editingSong, setEditingSong] = useState<Song | null>(null);
+  const [viewingDetailsSong, setViewingDetailsSong] = useState<Song | null>(null);
 
   const handleSongClick = () => {
     console.log('Song clicked', song);
@@ -419,8 +423,22 @@ function SongRow({ song, index, gridTemplateColumns, isActive, isPlaying, onPlay
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
+          onEditSong={() => setEditingSong(song)}
+          onViewDetails={() => setViewingDetailsSong(song)}
         />
       )}
+
+      <EditSongModal
+        song={editingSong}
+        isOpen={!!editingSong}
+        onClose={() => setEditingSong(null)}
+      />
+
+      <SongDetailsModal
+        song={viewingDetailsSong}
+        isOpen={!!viewingDetailsSong}
+        onClose={() => setViewingDetailsSong(null)}
+      />
     </motion.div>
   );
 }

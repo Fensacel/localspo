@@ -13,7 +13,10 @@ import {
   Check,
 } from 'lucide-react';
 
+import { useNavigate } from 'react-router-dom';
+
 export function SettingsPage() {
+  const navigate = useNavigate();
   const {
     musicFolders,
     gapless,
@@ -242,6 +245,22 @@ export function SettingsPage() {
                 {updateStatus.error}
               </p>
             )}
+          </div>
+        </SettingsSection>
+
+        {/* Downloader Section */}
+        <SettingsSection title="Spotify Downloader" icon={Download}>
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-sm font-medium">Downloader Preferences</p>
+              <p className="text-xs text-text/30">Configure audio format, download location, lyrics & auto-import</p>
+            </div>
+            <button
+              onClick={() => navigate('/downloads')}
+              className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl text-xs font-semibold transition-colors"
+            >
+              Open Downloader
+            </button>
           </div>
         </SettingsSection>
 

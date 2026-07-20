@@ -180,10 +180,10 @@ export function getAudioUrl(filePath: string): string {
   return `local-audio://local/${encodeURIComponent(filePath)}`;
 }
 
-/**
- * Get standard-compliant URL for local image files (covers)
- */
 export function getImageUrl(filePath: string): string {
   if (!filePath) return '';
+  if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('data:')) {
+    return filePath;
+  }
   return `local-image://local/${encodeURIComponent(filePath)}`;
 }

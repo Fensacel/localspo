@@ -12,6 +12,7 @@ import {
   Search,
   FolderOpen,
   FileText,
+  Download,
 } from 'lucide-react';
 
 interface NavItem {
@@ -31,6 +32,7 @@ const libraryNavItems: NavItem[] = [
   { path: '/favorites', label: 'Favorites', icon: Heart },
   { path: '/playlists', label: 'Playlists', icon: ListMusic },
   { path: '/history', label: 'History', icon: Clock },
+  { path: '/downloads', label: 'Downloads', icon: Download },
 ];
 
 const bottomNavItems: NavItem[] = [

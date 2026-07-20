@@ -6,6 +6,8 @@ import type { Song, Album, Playlist } from '@/types';
 import { getImageUrl } from '@/utils';
 import { useState } from 'react';
 import { SongContextMenu } from '@/components/SongContextMenu';
+import { EditSongModal } from '@/components/EditSongModal';
+import { SongDetailsModal } from '@/components/SongDetailsModal';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -26,6 +28,8 @@ export function HomePage() {
   const { setQueue, currentSong, isPlaying, setIsPlaying } = usePlayerStore();
   const navigate = useNavigate();
   const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
+  const [editingSong, setEditingSong] = useState<Song | null>(null);
+  const [viewingDetailsSong, setViewingDetailsSong] = useState<Song | null>(null);
 
   const allRecentlyAdded = [...songs].sort((a, b) => b.addedAt - a.addedAt);
   const recentlyAdded = allRecentlyAdded.slice(0, 10);
@@ -169,8 +173,22 @@ export function HomePage() {
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
+          onEditSong={() => setEditingSong(contextMenu.song)}
+          onViewDetails={() => setViewingDetailsSong(contextMenu.song)}
         />
       )}
+
+      <EditSongModal
+        song={editingSong}
+        isOpen={!!editingSong}
+        onClose={() => setEditingSong(null)}
+      />
+
+      <SongDetailsModal
+        song={viewingDetailsSong}
+        isOpen={!!viewingDetailsSong}
+        onClose={() => setViewingDetailsSong(null)}
+      />
     </motion.div>
   );
 }

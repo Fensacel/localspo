@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { registerScannerIpc } from './scanner';
+import { registerDownloaderIpc } from './ipc/downloaderIpc';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -424,6 +425,7 @@ app.whenReady().then(() => {
   ensureDataFiles();
   registerIpcHandlers();
   registerScannerIpc(getDataPath);
+  registerDownloaderIpc(getDataPath);
   setupAutoUpdater();
   createWindow();
 

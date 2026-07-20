@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Check, ListMusic, ListPlus, Plus, ChevronRight, Trash2 } from 'lucide-react';
+import { Heart, Check, ListMusic, ListPlus, Plus, ChevronRight, Trash2, Tag, Info } from 'lucide-react';
 import { usePlaylistStore, useFavoritesStore, usePlayerStore, useToastStore } from '@/stores';
 import type { Song } from '@/types';
 
@@ -12,9 +12,11 @@ interface SongContextMenuProps {
   onClose: () => void;
   onRemoveFromPlaylist?: () => void; // Optional: Only for playlist detail page
   onRemoveFromHistory?: () => void; // Optional: Only for history page
+  onEditSong?: () => void; // Optional: Edit track info & tags
+  onViewDetails?: () => void; // Optional: View file technical specs & details
 }
 
-export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onRemoveFromHistory }: SongContextMenuProps) {
+export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onRemoveFromHistory, onEditSong, onViewDetails }: SongContextMenuProps) {
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
   const { playlists, addSongToPlaylist, createPlaylist } = usePlaylistStore();
   const isFav = isFavoriteSong(song.id);
@@ -98,7 +100,14 @@ export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onR
     onClose();
   };
 
-  const isLeft = x > window.innerWidth - 450;
+  const MENU_WIDTH = 224; // w-56
+  const MENU_HEIGHT = 220;
+
+  const adjustedX = Math.max(12, Math.min(x, window.innerWidth - MENU_WIDTH - 12));
+  const adjustedY = Math.max(12, Math.min(y, window.innerHeight - MENU_HEIGHT - 12));
+
+  const isLeft = adjustedX > window.innerWidth - 450;
+  const isTop = adjustedY > window.innerHeight - 280;
 
   return createPortal(
     <motion.div
@@ -108,7 +117,7 @@ export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onR
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.12 }}
       className="fixed w-56 glass rounded-xl py-1 z-50 shadow-glass border border-white/10 text-left font-sans text-xs text-text/80"
-      style={{ top: y, left: x }}
+      style={{ top: adjustedY, left: adjustedX }}
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
       onMouseUp={(e) => e.stopPropagation()}
@@ -137,7 +146,7 @@ export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onR
               initial={{ opacity: 0, x: isLeft ? 10 : -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: isLeft ? 10 : -10 }}
-              className={`absolute top-0 w-52 z-50 ${isLeft ? 'right-full pr-1.5' : 'left-full pl-1.5'}`}
+              className={`absolute ${isTop ? 'bottom-0' : 'top-0'} w-52 z-50 ${isLeft ? 'right-full pr-1.5' : 'left-full pl-1.5'}`}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
@@ -248,6 +257,34 @@ export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onR
         <ListPlus size={14} className="text-text/50" />
         <span>Add to queue</span>
       </button>
+
+      {/* Edit Track Info & Tags */}
+      {onEditSong && (
+        <button
+          onClick={() => {
+            onEditSong();
+            onClose();
+          }}
+          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 hover:text-text transition-colors font-medium text-left"
+        >
+          <Tag size={14} className="text-primary/70" />
+          <span>Edit info & tags</span>
+        </button>
+      )}
+
+      {/* View File Details & Technical Specs */}
+      {onViewDetails && (
+        <button
+          onClick={() => {
+            onViewDetails();
+            onClose();
+          }}
+          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 hover:text-text transition-colors font-medium text-left"
+        >
+          <Info size={14} className="text-blue-400/80" />
+          <span>Info & File details</span>
+        </button>
+      )}
 
       {/* 4. Optional Remove from current playlist */}
       {onRemoveFromPlaylist && (

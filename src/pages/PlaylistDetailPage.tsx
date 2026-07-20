@@ -6,10 +6,14 @@ import { formatTime } from '@/utils';
 import type { Song } from '@/types';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { SongContextMenu } from '@/components/SongContextMenu';
+import { EditSongModal } from '@/components/EditSongModal';
+import { SongDetailsModal } from '@/components/SongDetailsModal';
 
 export function PlaylistDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [editingSong, setEditingSong] = useState<Song | null>(null);
+  const [viewingDetailsSong, setViewingDetailsSong] = useState<Song | null>(null);
   const { playlists, removeSongFromPlaylist, deletePlaylist, updatePlaylist, addSongToPlaylist } = usePlaylistStore();
   const { getSongById } = useLibraryStore();
   const { currentSong, isPlaying, setQueue, setIsPlaying } = usePlayerStore();
@@ -681,6 +685,8 @@ export function PlaylistDetailPage() {
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
+          onEditSong={() => setEditingSong(contextMenu.song)}
+          onViewDetails={() => setViewingDetailsSong(contextMenu.song)}
           onRemoveFromPlaylist={() => {
             if (playlist) {
               removeSongFromPlaylist(playlist.id, contextMenu.song.id);
@@ -688,6 +694,16 @@ export function PlaylistDetailPage() {
           }}
         />
       )}
+      <EditSongModal
+        song={editingSong}
+        isOpen={!!editingSong}
+        onClose={() => setEditingSong(null)}
+      />
+      <SongDetailsModal
+        song={viewingDetailsSong}
+        isOpen={!!viewingDetailsSong}
+        onClose={() => setViewingDetailsSong(null)}
+      />
     </div>
   );
 }
