@@ -125,10 +125,18 @@ export type ViewMode = 'grid' | 'list';
 
 // ─── Lyrics ─────────────────────────────────────────────
 
+export interface LyricWord {
+  text: string;
+  startTime: number;
+  endTime: number;
+}
+
 export interface LyricLine {
   time: number;
   text: string;
   endTime?: number;
+  words?: LyricWord[];
+  isEnhanced?: boolean;
 }
 
 export interface LyricsData {

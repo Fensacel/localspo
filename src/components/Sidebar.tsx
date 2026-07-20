@@ -11,6 +11,7 @@ import {
   Settings,
   Search,
   FolderOpen,
+  FileText,
 } from 'lucide-react';
 
 interface NavItem {
@@ -32,7 +33,10 @@ const libraryNavItems: NavItem[] = [
   { path: '/history', label: 'History', icon: Clock },
 ];
 
-const bottomNavItems: NavItem[] = [{ path: '/settings', label: 'Settings', icon: Settings }];
+const bottomNavItems: NavItem[] = [
+  { path: '/docs', label: 'Docs', icon: FileText },
+  { path: '/settings', label: 'Settings', icon: Settings },
+];
 
 export function Sidebar() {
   const location = useLocation();

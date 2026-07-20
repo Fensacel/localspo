@@ -145,6 +145,70 @@ export function LyricsPanel() {
                 const isActive = index === currentIndex;
                 const isPast = currentIndex >= 0 && index < currentIndex;
 
+                if (isActive) {
+                  const tokens = line.text.split(/(\s+)/);
+                  let wordIndex = 0;
+
+                  return (
+                    <div
+                      key={`${line.time}-${index}`}
+                      ref={(el) => {
+                        if (el) lineRefs.current.set(index, el);
+                      }}
+                      className={seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'}
+                      onClick={() => {
+                        if (seekByLyricsEnabled === false) return;
+                        usePlayerStore.getState().setCurrentTime(line.time);
+                        window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
+                      }}
+                    >
+                      <motion.p
+                        animate={{
+                          fontSize: '34px',
+                          fontWeight: 800,
+                          opacity: 1,
+                          color: '#FFFFFF',
+                        }}
+                        transition={{ duration: 0.35, ease: 'easeOut' }}
+                        className="leading-snug"
+                      >
+                        {tokens.map((token, tokenIdx) => {
+                          const isWhitespace = token.trim().length === 0;
+                          if (isWhitespace) {
+                            return <span key={tokenIdx}>{token}</span>;
+                          }
+
+                          const wordObj = line.words ? line.words[wordIndex] : null;
+                          wordIndex++;
+
+                          const wordStart = wordObj ? wordObj.startTime : line.time;
+                          const isWordActive = currentTime >= wordStart;
+
+                          return (
+                            <motion.span
+                              key={tokenIdx}
+                              animate={{
+                                color: isWordActive ? '#ffffff' : 'rgba(255, 255, 255, 0.38)',
+                                textShadow: isWordActive ? '0 0 10px rgba(255, 255, 255, 0.4)' : 'none',
+                              }}
+                              transition={{ duration: 0.15 }}
+                              className="inline-block"
+                              onClick={(e) => {
+                                if (seekByLyricsEnabled === false) return;
+                                e.stopPropagation();
+                                usePlayerStore.getState().setCurrentTime(wordStart);
+                                window.dispatchEvent(new CustomEvent('player:seek', { detail: wordStart }));
+                              }}
+                            >
+                              {token}
+                            </motion.span>
+                          );
+                        })}
+                      </motion.p>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={`${line.time}-${index}`}
@@ -153,19 +217,16 @@ export function LyricsPanel() {
                     }}
                     className={seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'}
                     onClick={() => {
-                      if (!seekByLyricsEnabled) return;
-                      console.log('[LyricsPanel] Lyric clicked. Time:', line.time);
-                      const duration = usePlayerStore.getState().duration;
-                      const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
-                      usePlayerStore.getState().setCurrentTime(seekTime);
-                      window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                      if (seekByLyricsEnabled === false) return;
+                      usePlayerStore.getState().setCurrentTime(line.time);
+                      window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
                     }}
                   >
                     <motion.p
                       animate={{
-                        fontSize: isActive ? '34px' : '22px',
-                        fontWeight: isActive ? 800 : 600,
-                        opacity: isActive ? 1 : isPast ? 0.22 : 0.38,
+                        fontSize: '22px',
+                        fontWeight: 600,
+                        opacity: isPast ? 0.22 : 0.38,
                         color: '#FFFFFF',
                       }}
                       transition={{ duration: 0.35, ease: 'easeOut' }}

@@ -14,6 +14,7 @@ export function AudioEngine() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
+  const lastSeekTimestampRef = useRef<number>(0);
 
   const {
     currentSong,
@@ -416,14 +417,29 @@ export function AudioEngine() {
       const audio = audioRef.current;
       if (!audio) return;
       const time = (e as CustomEvent).detail;
-      console.log(`[AudioEngine CustomEvent] player:seek event received. Seeking to: ${time.toFixed(2)}`);
-      usePlayerStore.getState().setIsSeeking(true);
-      if (audio.duration > 0 && audio.readyState >= 1) {
+      if (typeof time !== 'number' || !isFinite(time) || time < 0) return;
+
+      const playerStateBefore = usePlayerStore.getState();
+      console.log('[Lyric Seek] Before click -> Song ID:', playerStateBefore.currentSong?.id, '| Queue Index:', playerStateBefore.queueIndex);
+      console.log('[Lyric Seek] Target Lyric Time:', time.toFixed(2), '| Audio Current:', audio.currentTime.toFixed(2));
+
+      lastSeekTimestampRef.current = Date.now();
+      const wasPlaying = !audio.paused;
+
+      try {
         audio.currentTime = time;
-      } else {
-        console.warn(`[AudioEngine CustomEvent] Seek ignored. duration: ${audio.duration}, readyState: ${audio.readyState}`);
-        usePlayerStore.getState().setIsSeeking(false);
+        if (wasPlaying && audio.paused) {
+          audio.play().catch(() => {});
+        }
+      } catch (err) {
+        console.error('[Lyric Seek] Error setting currentTime:', err);
       }
+
+      usePlayerStore.getState().setCurrentTime(time);
+
+      const playerStateAfter = usePlayerStore.getState();
+      console.log('[Lyric Seek] After click -> Song ID:', playerStateAfter.currentSong?.id, '| Queue Index:', playerStateAfter.queueIndex);
+      console.log('[Lyric Seek] Audio Current After:', audio.currentTime.toFixed(2));
     };
 
     const handleVolume = (e: Event) => {

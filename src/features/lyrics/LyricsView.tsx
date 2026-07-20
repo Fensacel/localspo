@@ -136,13 +136,7 @@ export function LyricsView() {
 
                 if (isActive) {
                   const tokens = line.text.split(/(\s+)/);
-                  const wordsOnly = tokens.filter((t) => t.trim().length > 0);
-                  const totalChars = wordsOnly.reduce((acc, w) => acc + w.length, 0);
-                  const lineStart = line.time;
-                  const lineEnd = line.endTime || (line.time + 3.5);
-                  const lineDuration = Math.max(0.5, lineEnd - lineStart);
-
-                  let cumulativeChars = 0;
+                  let wordIndex = 0;
 
                   return (
                     <div
@@ -154,11 +148,9 @@ export function LyricsView() {
                         seekByLyricsEnabled ? 'cursor-pointer hover:scale-[1.015]' : 'cursor-default'
                       }`}
                       onClick={() => {
-                        if (!seekByLyricsEnabled) return;
-                        const duration = usePlayerStore.getState().duration;
-                        const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
-                        usePlayerStore.getState().setCurrentTime(seekTime);
-                        window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                        if (seekByLyricsEnabled === false) return;
+                        usePlayerStore.getState().setCurrentTime(line.time);
+                        window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
                       }}
                     >
                       <motion.p
@@ -172,18 +164,17 @@ export function LyricsView() {
                           textShadow: '0 4px 20px rgba(255,255,255,0.08)',
                         }}
                       >
-                        {totalChars === 0 ? line.text : tokens.map((token, tokenIdx) => {
+                        {tokens.map((token, tokenIdx) => {
                           const isWhitespace = token.trim().length === 0;
                           if (isWhitespace) {
                             return <span key={tokenIdx}>{token}</span>;
                           }
 
-                          const wordLength = token.length;
-                          const wordStartOffset = (cumulativeChars / totalChars) * lineDuration;
-                          const wordStart = lineStart + wordStartOffset;
-                          const isWordActive = currentTime >= wordStart;
+                          const wordObj = line.words ? line.words[wordIndex] : null;
+                          wordIndex++;
 
-                          cumulativeChars += wordLength;
+                          const wordStart = wordObj ? wordObj.startTime : line.time;
+                          const isWordActive = currentTime >= wordStart;
 
                           return (
                             <motion.span
@@ -194,6 +185,12 @@ export function LyricsView() {
                               }}
                               transition={{ duration: 0.15 }}
                               className="inline-block"
+                              onClick={(e) => {
+                                if (seekByLyricsEnabled === false) return;
+                                e.stopPropagation();
+                                usePlayerStore.getState().setCurrentTime(wordStart);
+                                window.dispatchEvent(new CustomEvent('player:seek', { detail: wordStart }));
+                              }}
                             >
                               {token}
                             </motion.span>
@@ -214,11 +211,9 @@ export function LyricsView() {
                       seekByLyricsEnabled ? 'cursor-pointer hover:scale-[1.015]' : 'cursor-default'
                     }`}
                     onClick={() => {
-                      if (!seekByLyricsEnabled) return;
-                      const duration = usePlayerStore.getState().duration;
-                      const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
-                      usePlayerStore.getState().setCurrentTime(seekTime);
-                      window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                      if (seekByLyricsEnabled === false) return;
+                      usePlayerStore.getState().setCurrentTime(line.time);
+                      window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
                     }}
                   >
                     <motion.p

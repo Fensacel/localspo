@@ -12,6 +12,7 @@ import { PlaylistDetailPage } from '@/pages/PlaylistDetailPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { SearchPage } from '@/pages/SearchPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { DocsPage } from '@/pages/DocsPage';
 import { useSettingsStore, useFavoritesStore, useHistoryStore, usePlaylistStore } from '@/stores';
 import { useEffect } from 'react';
 import { AudioEngine } from '@/features/player/AudioEngine';
@@ -49,6 +50,7 @@ export function App() {
           <Route path="/playlists/:id" element={<PlaylistDetailPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/search" element={<SearchPage />} />
+          <Route path="/docs" element={<DocsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>

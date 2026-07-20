@@ -275,7 +275,7 @@ export function NowPlayingOverlay() {
         </AnimatePresence>
 
         {/* ════ Top Bar ════ */}
-        <div className="relative z-10 flex items-center justify-between px-10 pt-7 pb-2 shrink-0">
+        <div className="relative z-10 flex items-center justify-between px-10 md:px-20 lg:px-28 pt-7 pb-2 shrink-0">
           <button
             onClick={() => setShowNowPlaying(false)}
             className="flex items-center gap-2 text-white/50 hover:text-white/90 transition-all duration-200 text-sm font-medium group"
@@ -288,10 +288,10 @@ export function NowPlayingOverlay() {
         </div>
 
         {/* ════ Main Grid ════ */}
-        <div className={`relative z-10 flex-1 flex min-h-0 px-10 pb-10 pt-2 gap-16 ${showLyrics ? '' : 'justify-center items-center'}`}>
+        <div className={`relative z-10 flex-1 flex min-h-0 px-10 md:px-20 lg:px-28 pb-8 pt-2 gap-12 lg:gap-20 ${showLyrics ? '' : 'justify-center items-center'}`}>
 
-          {/* ── Left Panel (35% or 100% when lyrics are hidden) ── */}
-          <div className={`${showLyrics ? 'w-[35%]' : 'w-full max-w-[440px] mx-auto'} flex flex-col justify-center items-center gap-7 shrink-0 transition-all duration-300`}>
+          {/* ── Left Panel (Adaptive scaling) ── */}
+          <div className={`${showLyrics ? 'w-full md:w-[38%] lg:w-[35%] max-w-[420px]' : 'w-full max-w-[420px] mx-auto'} flex flex-col justify-center items-center gap-4 sm:gap-6 shrink-0 transition-all duration-300 max-h-[85vh]`}>
 
             {/* Album Artwork */}
             <AnimatePresence mode="wait">
@@ -301,16 +301,16 @@ export function NowPlayingOverlay() {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.88, y: -24 }}
                 transition={{ type: 'spring', stiffness: 240, damping: 28 }}
-                className="relative w-full max-w-[440px] aspect-square"
+                className="relative aspect-square w-full max-w-[420px] lg:max-w-[460px] max-h-[46vh] min-h-[260px] shrink-0 flex items-center justify-center mx-auto"
               >
                 {coverSrc ? (
                   <img
                     src={coverSrc}
                     alt={currentSong.album}
                     draggable={false}
-                    className="w-full h-full object-cover"
+                    className="aspect-square w-full h-full object-cover"
                     style={{
-                      borderRadius: '20px',
+                      borderRadius: '24px',
                       boxShadow: '0 40px 100px rgba(0,0,0,0.65), 0 8px 24px rgba(0,0,0,0.4)',
                     }}
                   />
@@ -495,22 +495,19 @@ export function NowPlayingOverlay() {
                             key={idx}
                             ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
                             onClick={() => {
-                              if (!seekByLyricsEnabled) return;
-                              const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
-                              usePlayerStore.getState().setCurrentTime(seekTime);
-                              window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                              if (seekByLyricsEnabled === false) return;
+                              usePlayerStore.getState().setCurrentTime(line.time);
+                              window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
                             }}
-                            className={`px-5 py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
+                            className={`px-4 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
                           >
                             <motion.p
                               animate={{
-                                fontSize: '44px',
-                                fontWeight: 800,
                                 opacity: 1,
                                 color: '#ffffff',
                               }}
                               transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
-                              style={{ lineHeight: 1.25 }}
+                              className="text-2xl sm:text-3xl md:text-4xl lg:text-[40px] font-extrabold leading-tight tracking-tight text-white font-sans"
                             >
                               {totalChars === 0 ? line.text : tokens.map((token, tokenIdx) => {
                                 const isWhitespace = token.trim().length === 0;
@@ -534,6 +531,12 @@ export function NowPlayingOverlay() {
                                     }}
                                     transition={{ duration: 0.15 }}
                                     className="inline-block"
+                                    onClick={(e) => {
+                                      if (seekByLyricsEnabled === false) return;
+                                      e.stopPropagation();
+                                      usePlayerStore.getState().setCurrentTime(wordStart);
+                                      window.dispatchEvent(new CustomEvent('player:seek', { detail: wordStart }));
+                                    }}
                                   >
                                     {token}
                                   </motion.span>
@@ -549,23 +552,19 @@ export function NowPlayingOverlay() {
                           key={idx}
                           ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
                           onClick={() => {
-                            if (!seekByLyricsEnabled) return;
-                            console.log('[NowPlayingOverlay] Lyric clicked:', line.text, 'Seek to:', line.time);
-                            const seekTime = Math.max(0, Math.min(line.time, duration - 1.5));
-                            usePlayerStore.getState().setCurrentTime(seekTime);
-                            window.dispatchEvent(new CustomEvent('player:seek', { detail: seekTime }));
+                            if (seekByLyricsEnabled === false) return;
+                            usePlayerStore.getState().setCurrentTime(line.time);
+                            window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
                           }}
-                          className={`px-5 py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
+                          className={`px-4 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
                         >
                           <motion.p
                             animate={{
-                              fontSize: '28px',
-                              fontWeight: 700,
                               opacity: isPast ? 0.35 : 0.5,
                               color: '#ffffff',
                             }}
                             transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
-                            style={{ lineHeight: 1.25 }}
+                            className="text-base sm:text-lg md:text-xl lg:text-[25px] font-bold leading-tight tracking-tight text-white font-sans"
                           >
                             {line.text}
                           </motion.p>

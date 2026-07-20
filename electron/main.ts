@@ -157,21 +157,22 @@ function serveLocalFile(filePath: string, request: Request): Response {
   }
 }
 
-// Register protocol for local audio files
+// Register protocol for local audio files using native net.fetch for robust range support & stream cancellation
 function registerLocalProtocol(): void {
-  const logFile = path.join(app.getPath('userData'), 'localspo', 'protocol-debug.log');
-  const log = (msg: string) => {
-    try {
-      fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`, 'utf-8');
-    } catch (e) {
-      console.error(e);
+  // Prevent uncaught stream cancellation popups from undici/webstreams
+  process.on('uncaughtException', (err) => {
+    if (err && err.message && err.message.includes('ReadableStream')) {
+      console.warn('[MainProcess] Ignored ReadableStream cancellation:', err.message);
+      return;
     }
-  };
+    console.error('[MainProcess] Uncaught Exception:', err);
+  });
 
-  log('Protocol handler initialized');
+  process.on('unhandledRejection', (reason) => {
+    console.warn('[MainProcess] Unhandled Rejection:', reason);
+  });
 
   protocol.handle('local-audio', (request) => {
-    log(`[local-audio] Request URL: ${request.url}`);
     try {
       let filePath = '';
       if (request.url.startsWith('local-audio://local/')) {
@@ -182,22 +183,18 @@ function registerLocalProtocol(): void {
         filePath = request.url.slice('local-audio:'.length);
       }
       filePath = decodeURIComponent(filePath);
-      log(`[local-audio] Decoded path: ${filePath}`);
-      if (filePath.startsWith('/')) {
+      if (filePath.startsWith('/') && process.platform === 'win32') {
         filePath = filePath.slice(1);
-        log(`[local-audio] Stripped leading slash: ${filePath}`);
       }
       const resolvedPath = path.resolve(filePath);
-      log(`[local-audio] Serving file stream for: ${resolvedPath} with range: ${request.headers.get('range')}`);
       return serveLocalFile(resolvedPath, request);
     } catch (err) {
-      log(`[local-audio] Error: ${(err as Error).message}`);
-      throw err;
+      console.error('[local-audio] Error serving audio file:', err);
+      return new Response('File error', { status: 500 });
     }
   });
 
   protocol.handle('local-image', (request) => {
-    log(`[local-image] Request URL: ${request.url}`);
     try {
       let filePath = '';
       if (request.url.startsWith('local-image://local/')) {
@@ -208,18 +205,15 @@ function registerLocalProtocol(): void {
         filePath = request.url.slice('local-image:'.length);
       }
       filePath = decodeURIComponent(filePath);
-      log(`[local-image] Decoded path: ${filePath}`);
-      if (filePath.startsWith('/')) {
+      if (filePath.startsWith('/') && process.platform === 'win32') {
         filePath = filePath.slice(1);
-        log(`[local-image] Stripped leading slash: ${filePath}`);
       }
       const resolvedPath = path.resolve(filePath);
       const fileUrl = pathToFileURL(resolvedPath).toString();
-      log(`[local-image] Fetching fileUrl: ${fileUrl}`);
-      return net.fetch(fileUrl);
+      return net.fetch(fileUrl, { bypassCustomProtocolHandlers: true });
     } catch (err) {
-      log(`[local-image] Error: ${(err as Error).message}`);
-      throw err;
+      console.error('[local-image] Error serving image file:', err);
+      return new Response('Image error', { status: 500 });
     }
   });
 }
