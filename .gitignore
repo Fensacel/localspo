@@ -6,3 +6,9 @@ release/
 .env
 .DS_Store
 Thumbs.db
+
+# Ignore semua Markdown
+*.md
+
+# Kecuali README.md
+!README.md
