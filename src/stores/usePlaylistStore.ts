@@ -5,7 +5,7 @@ interface PlaylistState {
   playlists: Playlist[];
   isLoaded: boolean;
   loadPlaylists: () => Promise<void>;
-  createPlaylist: (name: string, description?: string) => Promise<Playlist>;
+  createPlaylist: (name: string, description?: string, coverPath?: string | null) => Promise<Playlist>;
   deletePlaylist: (id: string) => Promise<void>;
   updatePlaylist: (
     id: string,
@@ -36,13 +36,13 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     }
   },
 
-  createPlaylist: async (name, description = '') => {
+  createPlaylist: async (name, description = '', coverPath = null) => {
     const { playlists } = get();
     const newPlaylist: Playlist = {
       id: Math.random().toString(36).slice(2, 11),
       name,
       description,
-      coverPath: null,
+      coverPath: coverPath ?? null,
       songIds: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),

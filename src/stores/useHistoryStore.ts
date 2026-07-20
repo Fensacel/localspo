@@ -31,10 +31,20 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   addHistoryEntry: async (songId, duration) => {
     const { entries } = get();
+    const now = Date.now();
+
+    // Prevent duplicate entry if the most recent history entry is for the same song within 60 seconds
+    if (entries.length > 0) {
+      const lastEntry = entries[0];
+      if (lastEntry.songId === songId && now - lastEntry.playedAt < 60000) {
+        return;
+      }
+    }
+
     // Create new entry
     const newEntry: HistoryEntry = {
       songId,
-      playedAt: Date.now(),
+      playedAt: now,
       duration,
     };
 

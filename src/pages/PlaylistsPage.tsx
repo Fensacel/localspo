@@ -1,5 +1,5 @@
 import { usePlaylistStore } from '@/stores';
-import { ListMusic, Plus, Pin, Heart, Trash2 } from 'lucide-react';
+import { ListMusic, Plus, Pin, Heart, Trash2, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -11,16 +11,34 @@ export function PlaylistsPage() {
   const [playlistToDelete, setPlaylistToDelete] = useState<string | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
+  const [newPlaylistCover, setNewPlaylistCover] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const handlePickCover = async () => {
+    const file = await window.electronAPI.dialog.openImage();
+    if (file) {
+      setNewPlaylistCover(file);
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPlaylistName.trim()) return;
+    const name = newPlaylistName.trim();
+    if (!name) return;
 
-    await createPlaylist(newPlaylistName, newPlaylistDesc);
-    setNewPlaylistName('');
-    setNewPlaylistDesc('');
-    setShowCreateModal(false);
+    try {
+      const newPlaylist = await createPlaylist(name, newPlaylistDesc, newPlaylistCover);
+      setNewPlaylistName('');
+      setNewPlaylistDesc('');
+      setNewPlaylistCover(null);
+      setShowCreateModal(false);
+      if (newPlaylist?.id) {
+        navigate(`/playlists/${newPlaylist.id}`);
+      }
+    } catch (err) {
+      console.error('Failed to create playlist:', err);
+      setShowCreateModal(false);
+    }
   };
 
   // Sort playlists: pinned first, then newest
@@ -156,18 +174,41 @@ export function PlaylistsPage() {
             >
               <h3 className="text-lg font-bold mb-4">Create Playlist</h3>
               <form onSubmit={handleCreate} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-text/40 mb-1.5">
-                    Playlist Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newPlaylistName}
-                    onChange={(e) => setNewPlaylistName(e.target.value)}
-                    placeholder="My Awesome Playlist"
-                    className="w-full px-4 py-2.5 glass rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
+                <div className="flex gap-4 items-center">
+                  <button
+                    type="button"
+                    onClick={handlePickCover}
+                    className="group relative w-24 h-24 rounded-2xl glass shrink-0 overflow-hidden flex flex-col items-center justify-center border border-dashed border-white/20 hover:border-primary/50 transition-colors"
+                    title="Choose Cover Image"
+                  >
+                    {newPlaylistCover ? (
+                      <img
+                        src={`local-image://${encodeURIComponent(newPlaylistCover)}`}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <>
+                        <Camera size={24} className="text-text/30 group-hover:text-primary transition-colors mb-1" />
+                        <span className="text-[10px] font-semibold text-text/40 group-hover:text-text">Add Cover</span>
+                      </>
+                    )}
+                  </button>
+                  <div className="flex-1 space-y-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-text/40 mb-1">
+                        Playlist Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newPlaylistName}
+                        onChange={(e) => setNewPlaylistName(e.target.value)}
+                        placeholder="My Awesome Playlist"
+                        className="w-full px-3.5 py-2 glass rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-text/40 mb-1.5">
@@ -187,6 +228,7 @@ export function PlaylistsPage() {
                     onClick={() => {
                       setNewPlaylistName('');
                       setNewPlaylistDesc('');
+                      setNewPlaylistCover(null);
                       setShowCreateModal(false);
                     }}
                     className="px-4 py-2 text-sm text-text/50 hover:text-text transition-colors"

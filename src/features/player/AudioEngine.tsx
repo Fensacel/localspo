@@ -125,6 +125,7 @@ export function AudioEngine() {
   }, []);
 
   const lastSongIdRef = useRef<string | null>(null);
+  const lastLoggedHistorySongIdRef = useRef<string | null>(null);
 
   // Synchronize player store (currentSong, isPlaying) with HTMLAudioElement
   useEffect(() => {
@@ -137,6 +138,7 @@ export function AudioEngine() {
       console.log('[AudioEngine Sync] No song active. Resetting src.');
       audio.src = '';
       lastSongIdRef.current = null;
+      lastLoggedHistorySongIdRef.current = null;
       if (isPlaying) {
         setIsPlaying(false);
       }
@@ -152,6 +154,7 @@ export function AudioEngine() {
       console.log(`[AudioEngine Sync] Formatted source URL: "${src}"`);
 
       lastSongIdRef.current = currentSong.id;
+      lastLoggedHistorySongIdRef.current = null;
 
       // Verify path on local filesystem
       if (window.electronAPI?.fs?.exists) {
@@ -197,7 +200,10 @@ export function AudioEngine() {
           console.log('PLAY SUCCESS');
           console.log(`[AudioEngine Sync] audio.play() promise resolved. Currently playing: "${currentSong.title}"`);
 
-          useHistoryStore.getState().addHistoryEntry(currentSong.id, currentSong.duration);
+          if (lastLoggedHistorySongIdRef.current !== currentSong.id) {
+            lastLoggedHistorySongIdRef.current = currentSong.id;
+            useHistoryStore.getState().addHistoryEntry(currentSong.id, currentSong.duration);
+          }
 
           if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({

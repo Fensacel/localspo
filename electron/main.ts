@@ -273,6 +273,32 @@ function registerIpcHandlers(): void {
   ipcMain.on('window:close', () => mainWindow?.close());
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false);
 
+  // Dialogs
+  ipcMain.handle('dialog:openFolder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory'],
+      title: 'Select Music Folder',
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle('dialog:openImage', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      title: 'Select Playlist Cover Image',
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const src = result.filePaths[0];
+    const ext = path.extname(src);
+    const destDir = path.join(getDataPath(), 'covers');
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+    const destName = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 7)}${ext}`;
+    const destPath = path.join(destDir, destName);
+    fs.copyFileSync(src, destPath);
+    return destPath.replace(/\\/g, '/');
+  });
+
   // Auto Updater IPC
   ipcMain.handle('updater:check', async () => {
     if (!app.isPackaged) {
