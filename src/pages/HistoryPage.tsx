@@ -1,5 +1,5 @@
 import { useHistoryStore, useLibraryStore, usePlayerStore } from '@/stores';
-import { Clock, Trash2, Play, Music, BarChart2, Award } from 'lucide-react';
+import { Clock, Play, Music, BarChart2, Award } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatTime } from '@/utils';
 import type { Song } from '@/types';
@@ -10,7 +10,7 @@ type Tab = 'recent' | 'stats';
 type Period = 'day' | 'week' | 'month';
 
 export function HistoryPage() {
-  const { entries, clearHistory } = useHistoryStore();
+  const { entries, removeFromHistory } = useHistoryStore();
   const { getSongById } = useLibraryStore();
   const { setQueue, currentSong } = usePlayerStore();
   const [activeTab, setActiveTab] = useState<Tab>('recent');
@@ -86,17 +86,6 @@ export function HistoryPage() {
             Track and analyze your favorite tracks
           </p>
         </div>
-        {historySongs.length > 0 && activeTab === 'recent' && (
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={clearHistory}
-            className="flex items-center gap-2 px-4 py-2 glass rounded-button text-sm font-medium text-text/60 hover:text-danger transition-colors"
-          >
-            <Trash2 size={14} />
-            Clear History
-          </motion.button>
-        )}
       </div>
 
       {/* Tabs */}
@@ -321,6 +310,7 @@ export function HistoryPage() {
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
+          onRemoveFromHistory={() => removeFromHistory(contextMenu.song.id)}
         />
       )}
     </div>

@@ -7,6 +7,7 @@ interface HistoryState {
   loadHistory: () => Promise<void>;
   addHistoryEntry: (songId: string, duration: number) => Promise<void>;
   clearHistory: () => Promise<void>;
+  removeFromHistory: (songId: string) => Promise<void>;
 }
 
 export const useHistoryStore = create<HistoryState>((set, get) => ({
@@ -71,6 +72,13 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   clearHistory: async () => {
     set({ entries: [] });
     await window.electronAPI.data.write('history.json', { entries: [] });
+  },
+
+  removeFromHistory: async (songId: string) => {
+    const { entries } = get();
+    const updatedEntries = entries.filter((e) => e.songId !== songId);
+    set({ entries: updatedEntries });
+    await window.electronAPI.data.write('history.json', { entries: updatedEntries });
   },
 }));
 

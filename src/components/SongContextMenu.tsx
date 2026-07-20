@@ -11,9 +11,10 @@ interface SongContextMenuProps {
   y: number;
   onClose: () => void;
   onRemoveFromPlaylist?: () => void; // Optional: Only for playlist detail page
+  onRemoveFromHistory?: () => void; // Optional: Only for history page
 }
 
-export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist }: SongContextMenuProps) {
+export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onRemoveFromHistory }: SongContextMenuProps) {
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
   const { playlists, addSongToPlaylist, createPlaylist } = usePlaylistStore();
   const isFav = isFavoriteSong(song.id);
@@ -259,6 +260,20 @@ export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist }: S
         >
           <Trash2 size={14} className="text-danger/60" />
           <span>Remove from playlist</span>
+        </button>
+      )}
+
+      {/* 5. Optional Remove from listening history */}
+      {onRemoveFromHistory && (
+        <button
+          onClick={() => {
+            onRemoveFromHistory();
+            onClose();
+          }}
+          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/5 hover:text-danger text-danger/80 transition-colors font-medium text-left border-t border-white/5 mt-1 pt-1.5"
+        >
+          <Trash2 size={14} className="text-danger/60" />
+          <span>Remove from history</span>
         </button>
       )}
     </motion.div>,

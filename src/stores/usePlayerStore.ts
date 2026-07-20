@@ -95,7 +95,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   showNowPlaying: false,
   showNowPlayingSidebar: false,
 
-  setCurrentSong: (song) => set({ currentSong: song }),
+  setCurrentSong: (song) => set({ currentSong: song, showNowPlayingSidebar: true }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setCurrentTime: (currentTime) => set({ currentTime }),
   setDuration: (duration) => set({ duration }),
@@ -159,6 +159,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentSong: queue[queueIndex] ?? null,
       isPlaying: true,
       sourceName: sourceName ?? null,
+      showNowPlayingSidebar: true,
     });
     console.log(get().currentSong);
   },
@@ -257,6 +258,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentSong: nextSong,
       currentTime: 0,
       isPlaying: true,
+      showNowPlayingSidebar: true,
       history: state.currentSong ? [...state.history, state.currentSong] : state.history,
     });
     return nextSong;
@@ -282,6 +284,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentSong: prevSong,
       currentTime: 0,
       isPlaying: true,
+      showNowPlayingSidebar: true,
     });
     return prevSong;
   },
