@@ -11,6 +11,7 @@ import { QueuePanel } from '@/components/QueuePanel';
 import { LyricsView } from '@/features/lyrics/LyricsView';
 import { NowPlayingPanel } from '@/components/NowPlayingPanel';
 import { ToastContainer } from '@/components/ToastContainer';
+import { UpdateModal } from '@/components/UpdateModal';
 
 export function MainLayout() {
   const location = useLocation();
@@ -129,6 +130,9 @@ export function MainLayout() {
 
       {/* Global Toast Alerts */}
       <ToastContainer />
+
+      {/* Auto Update Popup Modal */}
+      <UpdateModal />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "localspo",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A local music player desktop application built with Electron, React, and Tailwind CSS.",
   "main": "dist-electron/main.js",
   "author": "LocalSpo",
@@ -58,23 +58,38 @@
   "build": {
     "appId": "com.localspo.app",
     "productName": "LocalSpo",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
-    "publish": [
+    "extraResources": [
       {
-        "provider": "github",
-        "owner": "Fensacel",
-        "repo": "localspo"
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
-    "win": {
-      "target": "nsis",
-      "icon": "public/logo.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "Fensacel",
+      "repo": "localspo"
     }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "public/logo.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
   }
+}
 }

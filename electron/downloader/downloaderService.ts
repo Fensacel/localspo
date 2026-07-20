@@ -5,6 +5,7 @@ import http from 'http';
 import https from 'https';
 import { spawn, ChildProcess } from 'child_process';
 import { SpotifyApiExtractor, SpotifyTrackMeta } from './spotifyApi';
+import { YouTubeApiExtractor } from './youtubeApi';
 import { YTMusicApi } from './ytMusicApi';
 import { LyricsApi } from './lyricsApi';
 import { AudioTagger } from './tagger';
@@ -116,7 +117,12 @@ export class DownloaderService {
   }
 
   public async addUrl(urlStr: string): Promise<DownloadItem[]> {
-    const meta = await SpotifyApiExtractor.fetchMetadata(urlStr);
+    let meta;
+    if (YouTubeApiExtractor.parseUrl(urlStr)) {
+      meta = await YouTubeApiExtractor.fetchMetadata(urlStr);
+    } else {
+      meta = await SpotifyApiExtractor.fetchMetadata(urlStr);
+    }
     const addedItems: DownloadItem[] = [];
 
     for (const track of meta.tracks) {
@@ -302,10 +308,20 @@ export class DownloaderService {
 
     try {
       // 1. Search YouTube audio target
-      let searchTarget = `ytsearch1:${item.artist} - ${item.title} audio`;
-      const ytResult = await YTMusicApi.searchVideo(item.artist, item.title, item.album);
-      if (ytResult && ytResult.videoId) {
-        searchTarget = `https://www.youtube.com/watch?v=${ytResult.videoId}`;
+      let searchTarget = `ytsearch1:${item.artist} - ${item.title} official audio`;
+
+      if (
+        item.spotifyUrl.includes('youtube.com/') ||
+        item.spotifyUrl.includes('youtu.be/') ||
+        item.spotifyId.startsWith('yt_')
+      ) {
+        // Direct YouTube link pasted by user
+        searchTarget = item.spotifyUrl;
+      } else {
+        const ytResult = await YTMusicApi.searchVideo(item.artist, item.title, item.album);
+        if (ytResult && ytResult.videoId) {
+          searchTarget = `https://www.youtube.com/watch?v=${ytResult.videoId}`;
+        }
       }
 
       // 2. Download audio via yt-dlp to OS temp directory
@@ -322,20 +338,31 @@ export class DownloaderService {
       const ytDlpProc = spawn(binaries.ytdlp, args, { windowsHide: true });
       this.activeProcesses.set(item.id, ytDlpProc);
 
+      let stderrText = '';
+
       ytDlpProc.stdout.on('data', (chunk: Buffer) => {
         const text = chunk.toString('utf-8');
         this.parseYtDlpProgress(item, text);
       });
 
+      ytDlpProc.stderr.on('data', (chunk: Buffer) => {
+        stderrText += chunk.toString('utf-8');
+      });
+
       const exitCode = await new Promise<number>((resolve) => {
         ytDlpProc.on('close', (code) => resolve(code ?? 1));
-        ytDlpProc.on('error', () => resolve(1));
+        ytDlpProc.on('error', (err) => {
+          console.error('yt-dlp spawn error:', err);
+          stderrText += ` (${err.message})`;
+          resolve(1);
+        });
       });
 
       this.activeProcesses.delete(item.id);
 
       if (exitCode !== 0 || !fs.existsSync(tempAudioFile)) {
-        throw new Error('yt-dlp audio download failed');
+        const lastErr = stderrText.trim().split('\n').filter(Boolean).pop();
+        throw new Error(lastErr ? `yt-dlp download failed: ${lastErr}` : 'yt-dlp audio download failed');
       }
 
       // 3. Tagging phase inside temp directory

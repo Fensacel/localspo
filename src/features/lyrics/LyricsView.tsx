@@ -166,9 +166,6 @@ export function LyricsView() {
 
                 const showSubRomanization = mode === 'both' && !!line.romanization;
 
-                const tokens = displayText.split(/(\s+)/);
-                let wordIndex = 0;
-
                 return (
                   <div
                     key={`${line.time}-${index}`}
@@ -193,36 +190,7 @@ export function LyricsView() {
                       }`}
                       style={isActive ? { textShadow: '0 4px 20px rgba(255,255,255,0.08)' } : undefined}
                     >
-                      {isActive ? (
-                        tokens.map((token, tokenIdx) => {
-                          const isWhitespace = token.trim().length === 0;
-                          if (isWhitespace) return <span key={tokenIdx}>{token}</span>;
-                          const wordObj = line.words ? line.words[wordIndex++] : null;
-                          const wordStart = wordObj ? wordObj.startTime : line.time;
-                          const isWordActive = currentTime >= wordStart;
-                          return (
-                            <motion.span
-                              key={tokenIdx}
-                              animate={{
-                                color: isWordActive ? '#ffffff' : 'rgba(255, 255, 255, 0.35)',
-                                textShadow: isWordActive ? '0 0 12px rgba(255, 255, 255, 0.4)' : 'none',
-                              }}
-                              transition={{ duration: 0.15 }}
-                              className="inline-block"
-                              onClick={(e) => {
-                                if (seekByLyricsEnabled === false) return;
-                                e.stopPropagation();
-                                usePlayerStore.getState().setCurrentTime(wordStart);
-                                window.dispatchEvent(new CustomEvent('player:seek', { detail: wordStart }));
-                              }}
-                            >
-                              {token}
-                            </motion.span>
-                          );
-                        })
-                      ) : (
-                        displayText || '♪'
-                      )}
+                      {displayText || '♪'}
                     </motion.p>
 
                     {/* Sub Romanization Line (Both mode) */}

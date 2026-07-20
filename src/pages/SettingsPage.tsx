@@ -29,7 +29,7 @@ export function SettingsPage() {
     removeMusicFolder,
   } = useSettingsStore();
 
-  const [appVersion, setAppVersion] = useState<string>('1.0.4');
+  const [appVersion, setAppVersion] = useState<string>('1.0.5');
   const [updateStatus, setUpdateStatus] = useState<{ status: string; version?: string; percent?: number; error?: string } | null>(null);
 
   useEffect(() => {
@@ -193,29 +193,41 @@ export function SettingsPage() {
                   Restart & Install
                 </motion.button>
               ) : (
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  disabled={updateStatus?.status === 'checking' || updateStatus?.status === 'downloading'}
-                  onClick={() => {
-                    setUpdateStatus({ status: 'checking' });
-                    window.electronAPI.updater.check();
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 glass rounded-button text-xs font-semibold text-text/80 hover:text-text disabled:opacity-50"
-                >
-                  {updateStatus?.status === 'checking' ? (
-                    <RefreshCw size={14} className="animate-spin text-primary" />
-                  ) : (
-                    <Download size={14} />
-                  )}
-                  <span>
-                    {updateStatus?.status === 'checking'
-                      ? 'Checking...'
-                      : updateStatus?.status === 'downloading'
-                      ? `Downloading (${updateStatus.percent || 0}%)`
-                      : 'Check for updates'}
-                  </span>
-                </motion.button>
+                <div className="flex gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('test:showUpdateModal', { detail: { status: 'downloaded', version: '1.0.5' } }));
+                    }}
+                    className="px-3 py-2 bg-white/5 hover:bg-white/10 text-xs font-semibold text-text/70 hover:text-text rounded-xl border border-white/10 transition-colors"
+                  >
+                    Preview Update Popup
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    disabled={updateStatus?.status === 'checking' || updateStatus?.status === 'downloading'}
+                    onClick={() => {
+                      setUpdateStatus({ status: 'checking' });
+                      window.electronAPI.updater.check();
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 glass rounded-button text-xs font-semibold text-text/80 hover:text-text disabled:opacity-50"
+                  >
+                    {updateStatus?.status === 'checking' ? (
+                      <RefreshCw size={14} className="animate-spin text-primary" />
+                    ) : (
+                      <Download size={14} />
+                    )}
+                    <span>
+                      {updateStatus?.status === 'checking'
+                        ? 'Checking...'
+                        : updateStatus?.status === 'downloading'
+                        ? `Downloading (${updateStatus.percent || 0}%)`
+                        : 'Check for updates'}
+                    </span>
+                  </motion.button>
+                </div>
               )}
             </div>
 

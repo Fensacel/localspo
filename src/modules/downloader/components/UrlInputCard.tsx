@@ -34,9 +34,9 @@ export function UrlInputCard() {
           <Download size={20} />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-text">Download from Spotify</h2>
+          <h2 className="text-base font-semibold text-text">Download Music</h2>
           <p className="text-xs text-text/40">
-            Paste a Spotify Track, Album, Playlist, or Episode link
+            Paste a Spotify or YouTube track, album, playlist, or video link
           </p>
         </div>
       </div>
@@ -48,7 +48,7 @@ export function UrlInputCard() {
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://open.spotify.com/track/..."
+            placeholder="https://open.spotify.com/... or https://youtube.com/watch?v=..."
             className="w-full pl-11 pr-24 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-text placeholder:text-text/25 focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
           />
           <button
