@@ -2,6 +2,23 @@
 
 > **A Next-Gen, Premium Desktop Local Music Player** built with Electron, React, TypeScript, and Tailwind CSS. Designed for audiophiles and music lovers who appreciate sleek aesthetics and powerful features.
 
+[![Latest Release](https://img.shields.io/github/v/release/Fensacel/localspo?style=for-the-badge&color=10B981&label=Download%20Installer)](https://github.com/Fensacel/localspo/releases/latest)
+[![Platform - Windows](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows)](https://github.com/Fensacel/localspo/releases/latest)
+[![License - MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+
+---
+
+## 📥 Download Application
+
+You can download the latest installer `.exe` for Windows directly from the GitHub Releases page:
+
+### 👉 [**Click Here to Download Latest Version (GitHub Releases)**](https://github.com/Fensacel/localspo/releases/latest)
+
+1. Go to the [**Releases Page**](https://github.com/Fensacel/localspo/releases/latest).
+2. Download `LocalSpo Setup X.X.X.exe` under **Assets**.
+3. Run the installer to install BlueTune on your Windows PC.
+4. Enjoy your music with automatic lyrics, romanization, and built-in auto-updater!
+
 ---
 
 ## ✨ Features
@@ -22,37 +39,30 @@
 
 ---
 
-## 🚀 Getting Started
+## 💻 Developer Setup & Source Build
+
+If you want to contribute or build the application from source:
 
 ### Prerequisites
-
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
+- [Node.js](https://nodejs.org/) (v18 or higher)
 - [npm](https://www.npmjs.com/)
-
-### Installation & Development
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/Fensacel/localspo.git
 
-# 2. Navigate to the project directory
+# 2. Navigate to project folder
 cd localspo
 
 # 3. Install dependencies
 npm install
 
-# 4. Run application in development mode
+# 4. Run development app
 npm run dev
-```
 
-### Packaging & Production Build
-
-```bash
-# Build production desktop binary & installer (Windows / NSIS)
+# 5. Build production Windows installer
 npm run build
 ```
-
-The compiled installer and auto-updater manifest (`latest.yml`) will be generated in the `release/` directory.
 
 ---
 
