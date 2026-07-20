@@ -20,8 +20,18 @@ export interface ElectronAPI {
   };
   // App info
   app: {
+    getVersion: () => Promise<string>;
     getDataPath: () => Promise<string>;
     getUserDataPath: () => Promise<string>;
+  };
+  // Updater
+  updater: {
+    check: () => Promise<unknown>;
+    download: () => Promise<unknown>;
+    quitAndInstall: () => void;
+    onStatus: (
+      callback: (data: { status: string; version?: string; percent?: number; error?: string }) => void,
+    ) => () => void;
   };
   // File system
   fs: {
@@ -75,8 +85,19 @@ const electronAPI: ElectronAPI = {
     write: (fileName, data) => ipcRenderer.invoke('data:write', fileName, data),
   },
   app: {
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getDataPath: () => ipcRenderer.invoke('app:getDataPath'),
     getUserDataPath: () => ipcRenderer.invoke('app:getUserDataPath'),
+  },
+  updater: {
+    check: () => ipcRenderer.invoke('updater:check'),
+    download: () => ipcRenderer.invoke('updater:download'),
+    quitAndInstall: () => ipcRenderer.send('updater:quitAndInstall'),
+    onStatus: (callback) => {
+      const handler = (_event: unknown, data: any) => callback(data);
+      ipcRenderer.on('updater:status', handler);
+      return () => ipcRenderer.removeListener('updater:status', handler);
+    },
   },
   fs: {
     readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),

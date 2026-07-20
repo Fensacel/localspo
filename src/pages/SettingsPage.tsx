@@ -1,5 +1,6 @@
 import { useSettingsStore } from '@/stores';
 import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
   FolderOpen,
@@ -8,6 +9,8 @@ import {
   Trash2,
   Plus,
   RefreshCw,
+  Download,
+  Check,
 } from 'lucide-react';
 
 export function SettingsPage() {
@@ -22,6 +25,24 @@ export function SettingsPage() {
     addMusicFolder,
     removeMusicFolder,
   } = useSettingsStore();
+
+  const [appVersion, setAppVersion] = useState<string>('1.0.2');
+  const [updateStatus, setUpdateStatus] = useState<{ status: string; version?: string; percent?: number; error?: string } | null>(null);
+
+  useEffect(() => {
+    if (window.electronAPI?.app?.getVersion) {
+      window.electronAPI.app.getVersion().then((ver: string) => {
+        if (ver) setAppVersion(ver);
+      });
+    }
+
+    if (window.electronAPI?.updater?.onStatus) {
+      const cleanup = window.electronAPI.updater.onStatus((data: any) => {
+        setUpdateStatus(data);
+      });
+      return cleanup;
+    }
+  }, []);
 
   const handleAddFolder = async () => {
     const folder = await window.electronAPI.dialog.openFolder();
@@ -150,13 +171,87 @@ export function SettingsPage() {
           </div>
         </SettingsSection>
 
+        {/* Software Update */}
+        <SettingsSection title="Software Update" icon={Download}>
+          <div className="py-3 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">App Version</p>
+                <p className="text-xs text-text/30">v{appVersion}</p>
+              </div>
+
+              {updateStatus?.status === 'downloaded' ? (
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => window.electronAPI.updater.quitAndInstall()}
+                  className="px-4 py-2 bg-primary text-zinc-950 font-bold text-xs rounded-xl shadow-glow"
+                >
+                  Restart & Install
+                </motion.button>
+              ) : (
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  disabled={updateStatus?.status === 'checking' || updateStatus?.status === 'downloading'}
+                  onClick={() => {
+                    setUpdateStatus({ status: 'checking' });
+                    window.electronAPI.updater.check();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 glass rounded-button text-xs font-semibold text-text/80 hover:text-text disabled:opacity-50"
+                >
+                  {updateStatus?.status === 'checking' ? (
+                    <RefreshCw size={14} className="animate-spin text-primary" />
+                  ) : (
+                    <Download size={14} />
+                  )}
+                  <span>
+                    {updateStatus?.status === 'checking'
+                      ? 'Checking...'
+                      : updateStatus?.status === 'downloading'
+                      ? `Downloading (${updateStatus.percent || 0}%)`
+                      : 'Check for updates'}
+                  </span>
+                </motion.button>
+              )}
+            </div>
+
+            {updateStatus?.status === 'downloading' && (
+              <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden mt-1">
+                <div
+                  className="bg-primary h-full transition-all duration-300"
+                  style={{ width: `${updateStatus.percent || 0}%` }}
+                />
+              </div>
+            )}
+
+            {updateStatus?.status === 'not-available' && (
+              <p className="text-xs text-emerald-400 font-medium flex items-center gap-1.5 mt-1">
+                <Check size={14} /> LocalSpo is up to date (v{appVersion})
+              </p>
+            )}
+
+            {updateStatus?.status === 'available' && (
+              <p className="text-xs text-primary font-medium mt-1">
+                New update available (v{updateStatus.version})! Downloading automatically...
+              </p>
+            )}
+
+            {updateStatus?.error && updateStatus.status === 'error' && (
+              <p className="text-xs text-danger font-medium mt-1">
+                {updateStatus.error}
+              </p>
+            )}
+          </div>
+        </SettingsSection>
+
         {/* About */}
         <div className="glass rounded-2xl p-6 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
             <img src="logo.png" className="w-5 h-5 object-contain" alt="" />
             <span className="text-sm font-bold tracking-wider">LocalSpo</span>
           </div>
-          <p className="text-xs text-text/30">Version 1.0.2</p>
+          <p className="text-xs text-text/30">Version {appVersion}</p>
         </div>
       </div>
     </div>

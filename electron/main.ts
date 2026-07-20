@@ -218,6 +218,46 @@ function registerLocalProtocol(): void {
   });
 }
 
+// ─── Auto Updater Setup ─────────────────────────────────
+
+function setupAutoUpdater(): void {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  const sendUpdateStatus = (data: { status: string; version?: string; percent?: number; error?: string }) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:status', data);
+    }
+  };
+
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateStatus({ status: 'checking' });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateStatus({ status: 'available', version: info.version });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    sendUpdateStatus({ status: 'not-available', version: info.version });
+  });
+
+  autoUpdater.on('error', (err) => {
+    sendUpdateStatus({ status: 'error', error: err?.message || 'Update check failed' });
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    sendUpdateStatus({
+      status: 'downloading',
+      percent: Math.round(progressObj.percent),
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    sendUpdateStatus({ status: 'downloaded', version: info.version });
+  });
+}
+
 // ─── IPC Handlers ───────────────────────────────────────
 
 function registerIpcHandlers(): void {
@@ -233,48 +273,41 @@ function registerIpcHandlers(): void {
   ipcMain.on('window:close', () => mainWindow?.close());
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false);
 
-  // File system
-  ipcMain.handle('dialog:openFolder', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      properties: ['openDirectory'],
-      title: 'Select Music Folder',
-    });
-    return result.canceled ? null : result.filePaths[0];
+  // Auto Updater IPC
+  ipcMain.handle('updater:check', async () => {
+    if (!app.isPackaged) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:status', { status: 'not-available', version: app.getVersion() });
+      }
+      return { status: 'dev-mode' };
+    }
+    try {
+      return await autoUpdater.checkForUpdates();
+    } catch (err: any) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:status', { status: 'error', error: err?.message || 'Check failed' });
+      }
+      return null;
+    }
   });
 
-  // Image picker — copies chosen image to app data covers/ folder
-  ipcMain.handle('dialog:openImage', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      properties: ['openFile'],
-      title: 'Select Playlist Cover Image',
-      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'] }],
-    });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    const src = result.filePaths[0];
-    const ext = path.extname(src);
-    const destDir = path.join(getDataPath(), 'covers');
-    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-    const destName = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 7)}${ext}`;
-    const destPath = path.join(destDir, destName);
-    fs.copyFileSync(src, destPath);
-    return destPath;
+  ipcMain.handle('updater:download', async () => {
+    try {
+      return await autoUpdater.downloadUpdate();
+    } catch (err: any) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:status', { status: 'error', error: err?.message || 'Download failed' });
+      }
+      return null;
+    }
   });
 
-  // Data operations
-  ipcMain.handle('data:read', async (_event, fileName: string) => {
-    const filePath = path.join(getDataPath(), fileName);
-    if (!fs.existsSync(filePath)) return null;
-    const data = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(data);
+  ipcMain.on('updater:quitAndInstall', () => {
+    autoUpdater.quitAndInstall();
   });
 
-  ipcMain.handle('data:write', async (_event, fileName: string, data: unknown) => {
-    const filePath = path.join(getDataPath(), fileName);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    return true;
-  });
-
-  // Get data path
+  // App version & paths
+  ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:getDataPath', () => getDataPath());
   ipcMain.handle('app:getUserDataPath', () => app.getPath('userData'));
 
@@ -335,10 +368,15 @@ app.whenReady().then(() => {
   ensureDataFiles();
   registerIpcHandlers();
   registerScannerIpc(getDataPath);
+  setupAutoUpdater();
   createWindow();
 
-  // Check for updates automatically
-  autoUpdater.checkForUpdatesAndNotify();
+  // Check for updates automatically in packaged build
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.warn('[AutoUpdater] Failed auto-check:', err);
+    });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
