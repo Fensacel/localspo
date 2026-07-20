@@ -11,6 +11,14 @@ export interface SpotifyTrackMeta {
   trackNumber?: number;
   discNumber?: number;
   type: 'track' | 'episode';
+
+  // Extended ID3 Metadata
+  isrc?: string;
+  publisher?: string;
+  copyright?: string;
+  composer?: string;
+  bpm?: number;
+  key?: string;
 }
 
 export interface SpotifyCollectionMeta {
@@ -23,6 +31,138 @@ export interface SpotifyCollectionMeta {
 }
 
 export class SpotifyApiExtractor {
+  private static cachedAccessToken: { token: string; expiresAt: number } | null = null;
+
+  private static async getAnonymousAccessToken(): Promise<string | null> {
+    if (this.cachedAccessToken && Date.now() < this.cachedAccessToken.expiresAt) {
+      return this.cachedAccessToken.token;
+    }
+    try {
+      const res = await this.httpGetJson('https://open.spotify.com/get_access_token?reason=transport&productType=web_player');
+      if (res && res.accessToken) {
+        this.cachedAccessToken = {
+          token: res.accessToken,
+          expiresAt: Date.now() + (res.accessTokenExpirationTimestampMs ? res.accessTokenExpirationTimestampMs - Date.now() - 60000 : 3000000),
+        };
+        return res.accessToken;
+      }
+    } catch (e) {
+      console.warn('Failed fetching Spotify web player token:', e);
+    }
+    return null;
+  }
+
+  private static async enrichTracksWithWebApi(tracks: SpotifyTrackMeta[]): Promise<void> {
+    const token = await this.getAnonymousAccessToken();
+    if (!token) return;
+
+    const trackMap = new Map<string, SpotifyTrackMeta>();
+    const validIds: string[] = [];
+
+    for (const track of tracks) {
+      if (track.id && !track.id.includes('_') && !track.id.includes(':')) {
+        trackMap.set(track.id, track);
+        validIds.push(track.id);
+      }
+    }
+
+    if (validIds.length === 0) return;
+
+    for (let i = 0; i < validIds.length; i += 50) {
+      const chunk = validIds.slice(i, i + 50);
+      try {
+        const res = await this.httpGetJson(`https://api.spotify.com/v1/tracks?ids=${chunk.join(',')}`, {
+          Authorization: `Bearer ${token}`,
+        });
+        if (res && Array.isArray(res.tracks)) {
+          const albumIdsToFetch = new Set<string>();
+
+          for (const apiTrack of res.tracks) {
+            if (!apiTrack || !apiTrack.id) continue;
+            const item = trackMap.get(apiTrack.id);
+            if (item) {
+              if (apiTrack.name) item.title = apiTrack.name;
+              if (apiTrack.artists && apiTrack.artists.length > 0) {
+                item.artistNames = apiTrack.artists.map((a: any) => a.name);
+                item.artist = item.artistNames.join(', ');
+              }
+              if (apiTrack.album?.name) item.album = apiTrack.album.name;
+              if (apiTrack.album?.images?.[0]?.url) item.coverUrl = apiTrack.album.images[0].url;
+              if (apiTrack.album?.release_date) item.releaseDate = apiTrack.album.release_date;
+              if (apiTrack.track_number) item.trackNumber = apiTrack.track_number;
+              if (apiTrack.disc_number) item.discNumber = apiTrack.disc_number;
+
+              // Extended ID3 Fields
+              if (apiTrack.external_ids?.isrc) item.isrc = apiTrack.external_ids.isrc;
+
+              if (apiTrack.album?.id) {
+                albumIdsToFetch.add(apiTrack.album.id);
+              }
+            }
+          }
+
+          // Fetch full album details to get publisher/label & copyrights
+          if (albumIdsToFetch.size > 0) {
+            const albumIdsArr = Array.from(albumIdsToFetch);
+            for (let j = 0; j < albumIdsArr.length; j += 20) {
+              const albumChunk = albumIdsArr.slice(j, j + 20);
+              const albumsRes = await this.httpGetJson(`https://api.spotify.com/v1/albums?ids=${albumChunk.join(',')}`, {
+                Authorization: `Bearer ${token}`,
+              });
+              if (albumsRes && Array.isArray(albumsRes.albums)) {
+                const albumInfoMap = new Map<string, { label: string; copyright: string }>();
+                for (const alb of albumsRes.albums) {
+                  if (!alb || !alb.id) continue;
+                  const label = alb.label || '';
+                  const copyright = alb.copyrights?.map((c: any) => c.text).join('; ') || '';
+                  albumInfoMap.set(alb.id, { label, copyright });
+                }
+
+                for (const apiTrack of res.tracks) {
+                  if (!apiTrack || !apiTrack.id || !apiTrack.album?.id) continue;
+                  const item = trackMap.get(apiTrack.id);
+                  const albInfo = albumInfoMap.get(apiTrack.album.id);
+                  if (item && albInfo) {
+                    if (albInfo.label) item.publisher = albInfo.label;
+                    if (albInfo.copyright) item.copyright = albInfo.copyright;
+                  }
+                }
+              }
+            }
+          }
+
+          // Fetch audio-features to get BPM (tempo) and Musical Key
+          try {
+            const featuresRes = await this.httpGetJson(`https://api.spotify.com/v1/audio-features?ids=${chunk.join(',')}`, {
+              Authorization: `Bearer ${token}`,
+            });
+            if (featuresRes && Array.isArray(featuresRes.audio_features)) {
+              const PITCHES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+              for (const feat of featuresRes.audio_features) {
+                if (!feat || !feat.id) continue;
+                const item = trackMap.get(feat.id);
+                if (item) {
+                  if (typeof feat.tempo === 'number' && feat.tempo > 0) {
+                    item.bpm = Math.round(feat.tempo);
+                  }
+                  if (typeof feat.key === 'number' && feat.key >= 0 && feat.key <= 11) {
+                    const pitchName = PITCHES[feat.key];
+                    const modeName = feat.mode === 1 ? 'Major' : 'Minor';
+                    item.key = `${pitchName} ${modeName}`;
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Failed fetching audio features:', e);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed enriching tracks with Spotify Web API:', err);
+      }
+    }
+  }
+
   public static parseUrl(urlStr: string): { type: 'track' | 'album' | 'playlist' | 'episode'; id: string } | null {
     if (!urlStr) return null;
     const cleanUrl = urlStr.trim();
@@ -55,10 +195,11 @@ export class SpotifyApiExtractor {
     }
 
     const { type, id } = parsed;
+    let collection: SpotifyCollectionMeta;
 
     if (type === 'track') {
       const track = await this.fetchSingleTrack(id);
-      return {
+      collection = {
         type: 'track',
         id,
         title: track.title,
@@ -66,11 +207,9 @@ export class SpotifyApiExtractor {
         coverUrl: track.coverUrl,
         tracks: [track],
       };
-    }
-
-    if (type === 'episode') {
+    } else if (type === 'episode') {
       const track = await this.fetchEpisode(id);
-      return {
+      collection = {
         type: 'episode',
         id,
         title: track.title,
@@ -78,17 +217,18 @@ export class SpotifyApiExtractor {
         coverUrl: track.coverUrl,
         tracks: [track],
       };
+    } else if (type === 'album') {
+      collection = await this.fetchAlbum(id);
+    } else if (type === 'playlist') {
+      collection = await this.fetchPlaylist(id);
+    } else {
+      throw new Error(`Unsupported entity type: ${type}`);
     }
 
-    if (type === 'album') {
-      return await this.fetchAlbum(id);
-    }
+    // Enrich all tracks with extended metadata from Spotify Web API
+    await this.enrichTracksWithWebApi(collection.tracks);
 
-    if (type === 'playlist') {
-      return await this.fetchPlaylist(id);
-    }
-
-    throw new Error(`Unsupported entity type: ${type}`);
+    return collection;
   }
 
   private static async fetchSingleTrack(id: string): Promise<SpotifyTrackMeta> {
@@ -433,11 +573,12 @@ export class SpotifyApiExtractor {
     return await res.text();
   }
 
-  private static async httpGetJson(url: string): Promise<any> {
+  private static async httpGetJson(url: string, extraHeaders?: Record<string, string>): Promise<any> {
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
         'Accept': 'application/json',
+        ...(extraHeaders || {}),
       },
     });
     if (!res.ok) return null;

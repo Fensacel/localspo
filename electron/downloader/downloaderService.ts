@@ -75,6 +75,17 @@ export interface DownloadItem {
   outputPath?: string;
   addedAt: number;
   attempts: number;
+
+  // Extended ID3 Metadata
+  releaseDate?: string;
+  trackNumber?: number;
+  discNumber?: number;
+  isrc?: string;
+  publisher?: string;
+  copyright?: string;
+  composer?: string;
+  bpm?: number;
+  key?: string;
 }
 
 export class DownloaderService {
@@ -129,6 +140,16 @@ export class DownloaderService {
         eta: '--:--',
         addedAt: Date.now(),
         attempts: 0,
+
+        releaseDate: track.releaseDate,
+        trackNumber: track.trackNumber,
+        discNumber: track.discNumber,
+        isrc: track.isrc,
+        publisher: track.publisher,
+        copyright: track.copyright,
+        composer: track.composer,
+        bpm: track.bpm,
+        key: track.key,
       };
 
       this.queue.push(item);
@@ -351,8 +372,18 @@ export class DownloaderService {
         title: item.title,
         artist: item.artist,
         album: item.album,
+        year: item.releaseDate ? item.releaseDate.slice(0, 4) : undefined,
+        trackNumber: item.trackNumber,
+        discNumber: item.discNumber,
         coverPath: localCoverPath,
         lyrics: lyricsContent,
+
+        isrc: item.isrc,
+        publisher: item.publisher,
+        copyright: item.copyright,
+        composer: item.composer,
+        bpm: item.bpm,
+        key: item.key,
       });
 
       // Cleanup local cover temp file

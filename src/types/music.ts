@@ -26,6 +26,21 @@ export interface Song {
   addedAt: number;
   playCount: number;
   isUserQueued?: boolean;
+
+  // Extended ID3 Metadata
+  composer?: string;
+  conductor?: string;
+  copyright?: string;
+  publisher?: string;
+  isrc?: string;
+  encodedBy?: string;
+  grouping?: string;
+  subtitle?: string;
+  comment?: string;
+  bpm?: number;
+  key?: string;
+  originalArtist?: string;
+  remixer?: string;
 }
 
 // ─── Album ──────────────────────────────────────────────

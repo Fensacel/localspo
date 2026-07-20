@@ -211,6 +211,78 @@ export function SongDetailsModal({ song, isOpen, onClose }: SongDetailsModalProp
               </div>
             </div>
 
+            {/* Extended ID3 Tags Section (if available) */}
+            {(song.composer || song.conductor || song.publisher || song.copyright || song.isrc || song.bpm || song.key || song.originalArtist || song.remixer || song.subtitle || song.comment) && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-text/70 uppercase tracking-wider flex items-center gap-2">
+                  <Disc size={14} className="text-amber-400" />
+                  <span>Extended ID3 Tags</span>
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {song.composer && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">Composer</span>
+                      <p className="font-mono text-xs font-semibold text-text truncate">{song.composer}</p>
+                    </div>
+                  )}
+                  {song.conductor && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">Conductor</span>
+                      <p className="font-mono text-xs font-semibold text-text truncate">{song.conductor}</p>
+                    </div>
+                  )}
+                  {song.originalArtist && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">Original Artist</span>
+                      <p className="font-mono text-xs font-semibold text-text truncate">{song.originalArtist}</p>
+                    </div>
+                  )}
+                  {song.remixer && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">Remixed By</span>
+                      <p className="font-mono text-xs font-semibold text-text truncate">{song.remixer}</p>
+                    </div>
+                  )}
+                  {song.publisher && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">Publisher / Label</span>
+                      <p className="font-mono text-xs font-semibold text-text truncate">{song.publisher}</p>
+                    </div>
+                  )}
+                  {song.isrc && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">ISRC Code</span>
+                      <p className="font-mono text-xs font-semibold text-text select-all">{song.isrc}</p>
+                    </div>
+                  )}
+                  {song.bpm && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">BPM / Tempo</span>
+                      <p className="font-mono text-xs font-semibold text-text">{song.bpm} BPM</p>
+                    </div>
+                  )}
+                  {song.key && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">Musical Key</span>
+                      <p className="font-mono text-xs font-semibold text-text">{song.key}</p>
+                    </div>
+                  )}
+                  {song.copyright && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1 col-span-2">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">Copyright</span>
+                      <p className="font-mono text-xs font-semibold text-text truncate">{song.copyright}</p>
+                    </div>
+                  )}
+                  {song.comment && (
+                    <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1 col-span-3">
+                      <span className="text-[10px] text-text/40 uppercase font-semibold">Comment</span>
+                      <p className="font-mono text-xs font-semibold text-text break-words">{song.comment}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* File Path Section */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-text/70 uppercase tracking-wider flex items-center gap-2">

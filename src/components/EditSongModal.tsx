@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Image, Save, Upload, Trash2, Loader2, FileText, Music } from 'lucide-react';
+import { X, Image, Save, Upload, Trash2, Loader2, FileText, Music, Sliders, ChevronDown, ChevronUp } from 'lucide-react';
 import { useLibraryStore, useToastStore } from '@/stores';
 import { getImageUrl } from '@/utils';
 import type { Song } from '@/types';
@@ -16,6 +16,7 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
   const { updateSongTags } = useLibraryStore();
   const { showToast } = useToastStore();
 
+  // Basic Tags
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [album, setAlbum] = useState('');
@@ -24,6 +25,23 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
   const [genre, setGenre] = useState('');
   const [coverPath, setCoverPath] = useState<string | null>(null);
   const [lyrics, setLyrics] = useState('');
+
+  // Extended Tags (TagScanner style)
+  const [showExtended, setShowExtended] = useState(false);
+  const [composer, setComposer] = useState('');
+  const [conductor, setConductor] = useState('');
+  const [originalArtist, setOriginalArtist] = useState('');
+  const [remixer, setRemixer] = useState('');
+  const [publisher, setPublisher] = useState('');
+  const [copyright, setCopyright] = useState('');
+  const [isrc, setIsrc] = useState('');
+  const [encodedBy, setEncodedBy] = useState('');
+  const [grouping, setGrouping] = useState('');
+  const [subtitle, setSubtitle] = useState('');
+  const [comment, setComment] = useState('');
+  const [bpm, setBpm] = useState<number | ''>('');
+  const [key, setKey] = useState('');
+
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
 
@@ -47,6 +65,21 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
       setGenre(song.genre || '');
       setCoverPath(song.coverPath || null);
       setLyrics('');
+
+      // Populate extended fields
+      setComposer(song.composer || '');
+      setConductor(song.conductor || '');
+      setOriginalArtist(song.originalArtist || '');
+      setRemixer(song.remixer || '');
+      setPublisher(song.publisher || '');
+      setCopyright(song.copyright || '');
+      setIsrc(song.isrc || '');
+      setEncodedBy(song.encodedBy || '');
+      setGrouping(song.grouping || '');
+      setSubtitle(song.subtitle || '');
+      setComment(song.comment || '');
+      setBpm(song.bpm || '');
+      setKey(song.key || '');
 
       // Fetch existing lyrics
       if (window.electronAPI?.lyrics) {
@@ -98,10 +131,25 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
         genre: genre.trim(),
         coverPath,
         lyrics: lyrics.trim() || null,
+
+        // Extended ID3 Metadata
+        composer: composer.trim() || undefined,
+        conductor: conductor.trim() || undefined,
+        originalArtist: originalArtist.trim() || undefined,
+        remixer: remixer.trim() || undefined,
+        publisher: publisher.trim() || undefined,
+        copyright: copyright.trim() || undefined,
+        isrc: isrc.trim() || undefined,
+        encodedBy: encodedBy.trim() || undefined,
+        grouping: grouping.trim() || undefined,
+        subtitle: subtitle.trim() || undefined,
+        comment: comment.trim() || undefined,
+        bpm: typeof bpm === 'number' ? bpm : undefined,
+        key: key.trim() || undefined,
       });
 
       if (success) {
-        showToast('Track info updated successfully!', 'success');
+        showToast('Track info & extended ID3 tags updated successfully!', 'success');
         onClose();
       } else {
         showToast('Failed to update track info', 'error');
@@ -137,7 +185,7 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
                 <Music size={18} />
               </div>
               <div>
-                <h2 className="text-base font-bold text-text">Edit Track Info & Tags</h2>
+                <h2 className="text-base font-bold text-text">Edit Track Info & ID3 Tags</h2>
                 <p className="text-xs text-text/50 truncate max-w-sm">{song.path}</p>
               </div>
             </div>
@@ -206,7 +254,7 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
                 </button>
               </div>
 
-              {/* Right Column: Metadata Fields */}
+              {/* Right Column: Standard Metadata Fields */}
               <div className="md:col-span-2 space-y-3">
                 <div>
                   <label className="block text-text/60 mb-1 font-medium">Title *</label>
@@ -275,11 +323,182 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
                       value={genre}
                       onChange={(e) => setGenre(e.target.value)}
                       className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
-                      placeholder="Pop, Rock, Indietronica..."
+                      placeholder="Pop, Rock, K-Pop..."
                     />
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Extended ID3 Tags Section (Accordion) */}
+            <div className="pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setShowExtended(!showExtended)}
+                className="w-full py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 flex items-center justify-between text-text font-semibold transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Sliders size={14} className="text-primary" />
+                  <span>Extended ID3 Tags (Publisher, ISRC, Composer, BPM...)</span>
+                </div>
+                {showExtended ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              <AnimatePresence>
+                {showExtended && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden space-y-3 pt-3"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Original Artist</label>
+                        <input
+                          type="text"
+                          value={originalArtist}
+                          onChange={(e) => setOriginalArtist(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="Original Artist Name"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Remixed By</label>
+                        <input
+                          type="text"
+                          value={remixer}
+                          onChange={(e) => setRemixer(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="Remixer Name"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Composer</label>
+                        <input
+                          type="text"
+                          value={composer}
+                          onChange={(e) => setComposer(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="Songwriter / Composer"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Conductor</label>
+                        <input
+                          type="text"
+                          value={conductor}
+                          onChange={(e) => setConductor(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="Conductor Name"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Publisher / Label</label>
+                        <input
+                          type="text"
+                          value={publisher}
+                          onChange={(e) => setPublisher(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="Record Label / Publisher"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">ISRC Code</label>
+                        <input
+                          type="text"
+                          value={isrc}
+                          onChange={(e) => setIsrc(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs font-mono"
+                          placeholder="e.g. USUM71702894"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Copyright</label>
+                        <input
+                          type="text"
+                          value={copyright}
+                          onChange={(e) => setCopyright(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="© 2024 Record Company"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Encoded By</label>
+                        <input
+                          type="text"
+                          value={encodedBy}
+                          onChange={(e) => setEncodedBy(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="Encoder / Software"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">BPM (Tempo)</label>
+                        <input
+                          type="number"
+                          value={bpm}
+                          onChange={(e) => setBpm(e.target.value ? parseInt(e.target.value, 10) : '')}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="e.g. 128"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Musical Key</label>
+                        <input
+                          type="text"
+                          value={key}
+                          onChange={(e) => setKey(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="e.g. C#m / 8A"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Grouping</label>
+                        <input
+                          type="text"
+                          value={grouping}
+                          onChange={(e) => setGrouping(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="Work / Suite / Grouping"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-text/60 mb-1 font-medium">Subtitle</label>
+                        <input
+                          type="text"
+                          value={subtitle}
+                          onChange={(e) => setSubtitle(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                          placeholder="Track Subtitle"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-text/60 mb-1 font-medium">Comment</label>
+                      <input
+                        type="text"
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 text-xs"
+                        placeholder="Tag comments / Notes"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Embedded Lyrics Section */}
@@ -299,7 +518,7 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
               <textarea
                 value={lyrics}
                 onChange={(e) => setLyrics(e.target.value)}
-                rows={6}
+                rows={5}
                 placeholder="[00:12.34] Lyrics line 1&#10;[00:15.89] Lyrics line 2&#10;or plain lyrics text..."
                 className="w-full px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-text focus:outline-none focus:border-primary/50 font-mono text-xs leading-relaxed"
               />

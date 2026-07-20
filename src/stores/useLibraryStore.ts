@@ -35,6 +35,19 @@ interface LibraryState {
       genre?: string;
       coverPath?: string | null;
       lyrics?: string | null;
+      composer?: string;
+      conductor?: string;
+      copyright?: string;
+      publisher?: string;
+      isrc?: string;
+      encodedBy?: string;
+      grouping?: string;
+      subtitle?: string;
+      comment?: string;
+      bpm?: number;
+      key?: string;
+      originalArtist?: string;
+      remixer?: string;
     },
   ) => Promise<boolean>;
 }

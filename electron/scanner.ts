@@ -37,6 +37,21 @@ interface RawMetadata {
   coverData: { data: Buffer; format: string } | null;
   embeddedLyrics: string | null;
   lrcPath: string | null;
+
+  // Extended ID3 Metadata
+  composer?: string;
+  conductor?: string;
+  copyright?: string;
+  publisher?: string;
+  isrc?: string;
+  encodedBy?: string;
+  grouping?: string;
+  subtitle?: string;
+  comment?: string;
+  bpm?: number;
+  key?: string;
+  originalArtist?: string;
+  remixer?: string;
 }
 
 function getFileHash(filePath: string): string {
@@ -183,6 +198,15 @@ async function readMetadata(filePath: string, cachePath: string): Promise<RawMet
       savedCoverPath = findCoverFile(filePath);
     }
 
+    // Helper to safely get string from metadata array or string
+    const getString = (val: any): string => {
+      if (!val) return '';
+      if (Array.isArray(val)) return val[0] ? String(val[0]) : '';
+      return String(val);
+    };
+
+    const commentVal = common.comment?.[0] || (typeof common.comments === 'string' ? common.comments : (common.comments as any)?.[0]?.text) || '';
+
     return {
       title: common.title || path.basename(filePath, path.extname(filePath)),
       artist: common.artist || common.albumartist || 'Unknown Artist',
@@ -204,6 +228,21 @@ async function readMetadata(filePath: string, cachePath: string): Promise<RawMet
       coverData,
       embeddedLyrics,
       lrcPath,
+
+      // Extended ID3 Metadata
+      composer: getString(common.composer),
+      conductor: getString(common.conductor),
+      copyright: common.copyright || '',
+      publisher: getString(common.label || common.publisher),
+      isrc: getString(common.isrc),
+      encodedBy: common.encodedby || '',
+      grouping: common.grouping || '',
+      subtitle: getString(common.subtitle),
+      comment: String(commentVal),
+      bpm: common.bpm ? Number(common.bpm) : undefined,
+      key: common.key || '',
+      originalArtist: common.originalartist || '',
+      remixer: getString(common.remixer),
     };
   } catch (err) {
     console.error(`Error reading metadata for ${filePath}:`, err);
@@ -600,6 +639,21 @@ export function registerScannerIpc(getDataPath: () => string): void {
     genre?: string;
     coverPath?: string | null;
     lyrics?: string | null;
+
+    // Extended ID3 Metadata
+    composer?: string;
+    conductor?: string;
+    copyright?: string;
+    publisher?: string;
+    isrc?: string;
+    encodedBy?: string;
+    grouping?: string;
+    subtitle?: string;
+    comment?: string;
+    bpm?: number;
+    key?: string;
+    originalArtist?: string;
+    remixer?: string;
   }) => {
     const dataPath = getDataPath();
     const binaries = getBinaryPaths(() => dataPath);
@@ -614,8 +668,23 @@ export function registerScannerIpc(getDataPath: () => string): void {
         title: payload.title,
         artist: payload.artist,
         album: payload.album,
+        year: payload.year ? String(payload.year) : undefined,
         coverPath: payload.coverPath || null,
         lyrics: payload.lyrics || null,
+
+        composer: payload.composer,
+        conductor: payload.conductor,
+        copyright: payload.copyright,
+        publisher: payload.publisher,
+        isrc: payload.isrc,
+        encodedBy: payload.encodedBy,
+        grouping: payload.grouping,
+        subtitle: payload.subtitle,
+        comment: payload.comment,
+        bpm: payload.bpm,
+        key: payload.key,
+        originalArtist: payload.originalArtist,
+        remixer: payload.remixer,
       });
 
       // 2. Read updated metadata
@@ -656,6 +725,21 @@ export function registerScannerIpc(getDataPath: () => string): void {
             coverPath: updatedCoverPath,
             hasEmbeddedCover: !!updatedCoverPath,
             hasEmbeddedLyrics: !!payload.lyrics,
+
+            // Extended ID3 Metadata
+            composer: payload.composer || meta?.composer || '',
+            conductor: payload.conductor || meta?.conductor || '',
+            copyright: payload.copyright || meta?.copyright || '',
+            publisher: payload.publisher || meta?.publisher || '',
+            isrc: payload.isrc || meta?.isrc || '',
+            encodedBy: payload.encodedBy || meta?.encodedBy || '',
+            grouping: payload.grouping || meta?.grouping || '',
+            subtitle: payload.subtitle || meta?.subtitle || '',
+            comment: payload.comment || meta?.comment || '',
+            bpm: payload.bpm || meta?.bpm,
+            key: payload.key || meta?.key || '',
+            originalArtist: payload.originalArtist || meta?.originalArtist || '',
+            remixer: payload.remixer || meta?.remixer || '',
           };
 
           if (songIndex >= 0) {
