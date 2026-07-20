@@ -19,6 +19,8 @@ const defaultSettings: Settings = {
   visualizer: 'spectrum',
   lyricsEnabled: true,
   seekByLyricsEnabled: true,
+  romanizationMode: 'auto',
+  lyricsDisplayMode: 'both',
   equalizerPreset: 'flat',
   equalizerBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   volume: 0.8,

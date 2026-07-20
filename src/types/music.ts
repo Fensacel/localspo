@@ -107,6 +107,8 @@ export interface Settings {
   visualizer: VisualizerType;
   lyricsEnabled: boolean;
   seekByLyricsEnabled: boolean;
+  romanizationMode: 'off' | 'auto' | 'always';
+  lyricsDisplayMode: 'original' | 'romanized' | 'both';
   equalizerPreset: string;
   equalizerBands: number[];
   volume: number;
@@ -123,6 +125,9 @@ export type VisualizerType = 'waveform' | 'spectrum' | 'particle' | 'circular' |
 
 export type ViewMode = 'grid' | 'list';
 
+export type RomanizationMode = 'off' | 'auto' | 'always';
+export type LyricsDisplayMode = 'original' | 'romanized' | 'both';
+
 // ─── Lyrics ─────────────────────────────────────────────
 
 export interface LyricWord {
@@ -134,8 +139,10 @@ export interface LyricWord {
 export interface LyricLine {
   time: number;
   text: string;
-  endTime?: number;
+  romanization?: string;
   words?: LyricWord[];
+  romanizationWords?: LyricWord[];
+  endTime?: number;
   isEnhanced?: boolean;
 }
 
@@ -143,6 +150,7 @@ export interface LyricsData {
   synced: boolean;
   lines: LyricLine[];
   rawText: string;
+  detectedScript?: string;
 }
 
 // ─── Audio Info ─────────────────────────────────────────

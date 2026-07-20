@@ -5,9 +5,11 @@ import { parseLyrics, findCurrentLyricIndex } from '@/services/lyricsParser';
 import type { LyricsData } from '@/types';
 import { Mic2 } from 'lucide-react';
 
+import { RomanizationService } from '@/modules/romanization/RomanizationService';
+
 export function LyricsPanel() {
   const { currentSong, currentTime, showLyrics } = usePlayerStore();
-  const { seekByLyricsEnabled } = useSettingsStore();
+  const { seekByLyricsEnabled, lyricsDisplayMode, updateSettings } = useSettingsStore();
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,7 +44,9 @@ export function LyricsPanel() {
         if (cancelled) return;
 
         if (result) {
-          setLyrics(parseLyrics(result.content));
+          const parsed = parseLyrics(result.content);
+          const processed = await RomanizationService.processLyrics(parsed, currentSong.id);
+          if (!cancelled) setLyrics(processed);
         } else {
           setLyrics(null);
         }
@@ -138,49 +142,74 @@ export function LyricsPanel() {
             </div>
           )}
 
+          {/* Mode Selector Tab */}
+          {!isLoading && lyrics && lyrics.lines.some(l => l.romanization) && (
+            <div className="flex items-center justify-center pt-2 pb-4">
+              <div className="inline-flex items-center p-0.5 rounded-lg bg-white/[0.06] border border-white/10">
+                {(['original', 'romanized', 'both'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => updateSettings({ lyricsDisplayMode: mode })}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold capitalize transition-all duration-200 ${
+                      (lyricsDisplayMode || 'both') === mode
+                        ? 'bg-white text-black shadow-sm'
+                        : 'text-white/60 hover:text-white'
+                    }`}
+                  >
+                    {mode === 'original' ? 'Original' : mode === 'romanized' ? 'Romanization' : 'Both'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Synced lyrics */}
           {!isLoading && lyrics?.synced && (
-            <div className="space-y-6 pt-6 pb-40">
+            <div className="space-y-6 pt-4 pb-40">
               {lyrics.lines.map((line, index) => {
                 const isActive = index === currentIndex;
                 const isPast = currentIndex >= 0 && index < currentIndex;
+                const mode = lyricsDisplayMode || 'both';
 
-                if (isActive) {
-                  const tokens = line.text.split(/(\s+)/);
-                  let wordIndex = 0;
+                const displayText = mode === 'romanized'
+                  ? (line.romanization || line.text)
+                  : line.text;
 
-                  return (
-                    <div
-                      key={`${line.time}-${index}`}
-                      ref={(el) => {
-                        if (el) lineRefs.current.set(index, el);
+                const showSubRomanization = mode === 'both' && !!line.romanization;
+
+                const tokens = displayText.split(/(\s+)/);
+                let wordIndex = 0;
+
+                return (
+                  <div
+                    key={`${line.time}-${index}`}
+                    ref={(el) => {
+                      if (el) lineRefs.current.set(index, el);
+                    }}
+                    className={`space-y-1 ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'}`}
+                    onClick={() => {
+                      if (seekByLyricsEnabled === false) return;
+                      usePlayerStore.getState().setCurrentTime(line.time);
+                      window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
+                    }}
+                  >
+                    {/* Primary Line */}
+                    <motion.p
+                      animate={{
+                        fontSize: isActive ? '32px' : '22px',
+                        fontWeight: isActive ? 800 : 600,
+                        opacity: isActive ? 1 : isPast ? 0.22 : 0.38,
+                        color: '#FFFFFF',
                       }}
-                      className={seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'}
-                      onClick={() => {
-                        if (seekByLyricsEnabled === false) return;
-                        usePlayerStore.getState().setCurrentTime(line.time);
-                        window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
-                      }}
+                      transition={{ duration: 0.35, ease: 'easeOut' }}
+                      className="leading-snug font-sans"
                     >
-                      <motion.p
-                        animate={{
-                          fontSize: '34px',
-                          fontWeight: 800,
-                          opacity: 1,
-                          color: '#FFFFFF',
-                        }}
-                        transition={{ duration: 0.35, ease: 'easeOut' }}
-                        className="leading-snug"
-                      >
-                        {tokens.map((token, tokenIdx) => {
+                      {isActive ? (
+                        tokens.map((token, tokenIdx) => {
                           const isWhitespace = token.trim().length === 0;
-                          if (isWhitespace) {
-                            return <span key={tokenIdx}>{token}</span>;
-                          }
+                          if (isWhitespace) return <span key={tokenIdx}>{token}</span>;
 
-                          const wordObj = line.words ? line.words[wordIndex] : null;
-                          wordIndex++;
-
+                          const wordObj = line.words ? line.words[wordIndex++] : null;
                           const wordStart = wordObj ? wordObj.startTime : line.time;
                           const isWordActive = currentTime >= wordStart;
 
@@ -203,37 +232,26 @@ export function LyricsPanel() {
                               {token}
                             </motion.span>
                           );
-                        })}
-                      </motion.p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    key={`${line.time}-${index}`}
-                    ref={(el) => {
-                      if (el) lineRefs.current.set(index, el);
-                    }}
-                    className={seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'}
-                    onClick={() => {
-                      if (seekByLyricsEnabled === false) return;
-                      usePlayerStore.getState().setCurrentTime(line.time);
-                      window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
-                    }}
-                  >
-                    <motion.p
-                      animate={{
-                        fontSize: '22px',
-                        fontWeight: 600,
-                        opacity: isPast ? 0.22 : 0.38,
-                        color: '#FFFFFF',
-                      }}
-                      transition={{ duration: 0.35, ease: 'easeOut' }}
-                      className="leading-snug"
-                    >
-                      {line.text}
+                        })
+                      ) : (
+                        displayText
+                      )}
                     </motion.p>
+
+                    {/* Sub Romanization Line (Both mode) */}
+                    {showSubRomanization && (
+                      <motion.p
+                        animate={{
+                          fontSize: isActive ? '20px' : '15px',
+                          fontWeight: 500,
+                          opacity: isActive ? 0.82 : isPast ? 0.2 : 0.32,
+                        }}
+                        transition={{ duration: 0.35, ease: 'easeOut' }}
+                        className="leading-snug text-white/70 font-sans"
+                      >
+                        {line.romanization}
+                      </motion.p>
+                    )}
                   </div>
                 );
               })}

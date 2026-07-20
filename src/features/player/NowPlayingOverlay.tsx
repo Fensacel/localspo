@@ -17,6 +17,7 @@ import {
   Minimize2,
 } from 'lucide-react';
 import { parseLyrics, findCurrentLyricIndex } from '@/services/lyricsParser';
+import { RomanizationService } from '@/modules/romanization/RomanizationService';
 import { formatTime, getImageUrl } from '@/utils';
 import type { LyricsData } from '@/types';
 
@@ -28,26 +29,22 @@ function extractColors(src: string): Promise<[[number, number, number], [number,
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = 8;
-        canvas.height = 8;
+        canvas.width = 16;
+        canvas.height = 16;
         const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('no ctx');
-        ctx.drawImage(img, 0, 0, 8, 8);
-
-        // Sample two quadrants
-        const sample = (x: number, y: number, w: number, h: number): [number, number, number] => {
-          const d = ctx.getImageData(x, y, w, h).data;
-          let r = 0, g = 0, b = 0, n = 0;
-          for (let i = 0; i < d.length; i += 4) {
-            const lum = (d[i] + d[i + 1] + d[i + 2]) / 3;
-            if (lum > 20 && lum < 240) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
-          }
-          return n > 0 ? [Math.round(r / n), Math.round(g / n), Math.round(b / n)] : [40, 40, 80];
-        };
-
-        const c1 = sample(0, 0, 4, 8);   // left half
-        const c2 = sample(4, 0, 4, 8);   // right half
-        resolve([c1, c2]);
+        if (!ctx) return resolve([[40, 40, 80], [80, 40, 120]]);
+        ctx.drawImage(img, 0, 0, 16, 16);
+        const data = ctx.getImageData(0, 0, 16, 16).data;
+        let r1 = 0, g1 = 0, b1 = 0, c1 = 0;
+        let r2 = 0, g2 = 0, b2 = 0, c2 = 0;
+        for (let i = 0; i < data.length; i += 8) {
+          if (i < data.length / 2) { r1 += data[i]; g1 += data[i+1]; b1 += data[i+2]; c1++; }
+          else { r2 += data[i]; g2 += data[i+1]; b2 += data[i+2]; c2++; }
+        }
+        resolve([
+          [Math.round(r1 / (c1 || 1)), Math.round(g1 / (c1 || 1)), Math.round(b1 / (c1 || 1))],
+          [Math.round(r2 / (c2 || 1)), Math.round(g2 / (c2 || 1)), Math.round(b2 / (c2 || 1))],
+        ]);
       } catch {
         resolve([[40, 40, 80], [80, 40, 120]]);
       }
@@ -131,7 +128,7 @@ export function NowPlayingOverlay() {
   } = usePlayerStore();
 
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
-  const { seekByLyricsEnabled } = useSettingsStore();
+  const { seekByLyricsEnabled, lyricsDisplayMode, updateSettings } = useSettingsStore();
 
   const showLyrics = true;
   const [lyrics, setLyrics] = useState<LyricsData | null>(null);
@@ -175,9 +172,15 @@ export function NowPlayingOverlay() {
         currentSong.album,
         currentSong.duration,
       )
-      .then((res: { source: string; content: string } | null) => {
+      .then(async (res: { source: string; content: string } | null) => {
         if (cancelled) return;
-        setLyrics(res ? parseLyrics(res.content) : null);
+        if (res) {
+          const parsed = parseLyrics(res.content);
+          const processed = await RomanizationService.processLyrics(parsed, currentSong.id);
+          if (!cancelled) setLyrics(processed);
+        } else {
+          setLyrics(null);
+        }
       })
       .catch(() => { if (!cancelled) setLyrics(null); })
       .finally(() => { if (!cancelled) setIsLoadingLyrics(false); });
@@ -473,47 +476,78 @@ export function NowPlayingOverlay() {
                   </div>
                 )}
 
+                {/* Mode Selector Tab (Original | Romanization | Both) */}
+                {!isLoadingLyrics && lyrics && lyrics.lines.some(l => l.romanization) && (
+                  <div className="flex items-center justify-start pl-4 pt-4 pb-2">
+                    <div className="inline-flex items-center p-1 rounded-xl bg-white/[0.06] border border-white/10 backdrop-blur-md">
+                      {(['original', 'romanized', 'both'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => updateSettings({ lyricsDisplayMode: mode })}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all duration-200 ${
+                            (lyricsDisplayMode || 'both') === mode
+                              ? 'bg-white text-black shadow-md'
+                              : 'text-white/60 hover:text-white'
+                          }`}
+                        >
+                          {mode === 'original' ? 'Original' : mode === 'romanized' ? 'Romanization' : 'Both'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Synced lyrics */}
                 {!isLoadingLyrics && lyrics?.synced && (
-                  <div className="pt-8 pb-[55vh] pl-2 pr-8 space-y-3">
+                  <div className="pt-4 pb-[55vh] pl-2 pr-8 space-y-4">
                     {lyrics.lines.map((line, idx) => {
                       const isActive = idx === currentLyricIndex;
                       const isPast = currentLyricIndex >= 0 && idx < currentLyricIndex;
+                      const mode = lyricsDisplayMode || 'both';
 
-                      if (isActive) {
-                        const tokens = line.text.split(/(\s+)/);
-                        const wordsOnly = tokens.filter(t => t.trim().length > 0);
-                        const totalChars = wordsOnly.reduce((acc, w) => acc + w.length, 0);
-                        const lineStart = line.time;
-                        const lineEnd = line.endTime || (line.time + 3.5);
-                        const lineDuration = Math.max(0.5, lineEnd - lineStart);
-                        
-                        let cumulativeChars = 0;
+                      const displayText = mode === 'romanized'
+                        ? (line.romanization || line.text)
+                        : line.text;
 
-                        return (
-                          <div
-                            key={idx}
-                            ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
-                            onClick={() => {
-                              if (seekByLyricsEnabled === false) return;
-                              usePlayerStore.getState().setCurrentTime(line.time);
-                              window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
+                      const showSubRomanization = mode === 'both' && !!line.romanization;
+
+                      const tokens = displayText.split(/(\s+)/);
+                      const wordsOnly = tokens.filter(t => t.trim().length > 0);
+                      const totalChars = wordsOnly.reduce((acc, w) => acc + w.length, 0);
+                      const lineStart = line.time;
+                      const lineEnd = line.endTime || (line.time + 3.5);
+                      const lineDuration = Math.max(0.5, lineEnd - lineStart);
+                      
+                      let cumulativeChars = 0;
+
+                      return (
+                        <div
+                          key={idx}
+                          ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
+                          onClick={() => {
+                            if (seekByLyricsEnabled === false) return;
+                            usePlayerStore.getState().setCurrentTime(line.time);
+                            window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
+                          }}
+                          className={`px-4 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans space-y-1`}
+                        >
+                          {/* Primary Line */}
+                          <motion.p
+                            animate={{
+                              opacity: isActive ? 1 : isPast ? 0.35 : 0.5,
+                              color: '#ffffff',
                             }}
-                            className={`px-4 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
+                            transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                            className={`font-sans tracking-tight leading-tight text-white ${
+                              isActive
+                                ? 'text-2xl sm:text-3xl md:text-4xl lg:text-[40px] font-extrabold'
+                                : 'text-base sm:text-lg md:text-xl lg:text-[25px] font-bold'
+                            }`}
                           >
-                            <motion.p
-                              animate={{
-                                opacity: 1,
-                                color: '#ffffff',
-                              }}
-                              transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
-                              className="text-2xl sm:text-3xl md:text-4xl lg:text-[40px] font-extrabold leading-tight tracking-tight text-white font-sans"
-                            >
-                              {totalChars === 0 ? line.text : tokens.map((token, tokenIdx) => {
+                            {isActive ? (
+                              totalChars === 0 ? displayText : tokens.map((token, tokenIdx) => {
                                 const isWhitespace = token.trim().length === 0;
-                                if (isWhitespace) {
-                                  return <span key={tokenIdx}>{token}</span>;
-                                }
+                                if (isWhitespace) return <span key={tokenIdx}>{token}</span>;
 
                                 const wordLength = token.length;
                                 const wordStartOffset = (cumulativeChars / totalChars) * lineDuration;
@@ -541,33 +575,28 @@ export function NowPlayingOverlay() {
                                     {token}
                                   </motion.span>
                                 );
-                              })}
-                            </motion.p>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div
-                          key={idx}
-                          ref={(el) => { if (el) lyricLineRefs.current.set(idx, el); }}
-                          onClick={() => {
-                            if (seekByLyricsEnabled === false) return;
-                            usePlayerStore.getState().setCurrentTime(line.time);
-                            window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
-                          }}
-                          className={`px-4 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl transition-all duration-300 bg-transparent border border-transparent hover:bg-white/[0.05] hover:shadow-[0_0_20px_rgba(255,255,255,0.08)] ${seekByLyricsEnabled ? 'cursor-pointer' : 'cursor-default'} font-sans`}
-                        >
-                          <motion.p
-                            animate={{
-                              opacity: isPast ? 0.35 : 0.5,
-                              color: '#ffffff',
-                            }}
-                            transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
-                            className="text-base sm:text-lg md:text-xl lg:text-[25px] font-bold leading-tight tracking-tight text-white font-sans"
-                          >
-                            {line.text}
+                              })
+                            ) : (
+                              displayText
+                            )}
                           </motion.p>
+
+                          {/* Sub Romanization Line (Both mode) */}
+                          {showSubRomanization && (
+                            <motion.p
+                              animate={{
+                                opacity: isActive ? 0.85 : isPast ? 0.3 : 0.42,
+                              }}
+                              transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+                              className={`font-sans tracking-wide text-white/75 ${
+                                isActive
+                                  ? 'text-lg sm:text-xl md:text-2xl lg:text-[26px] font-semibold'
+                                  : 'text-sm sm:text-base md:text-lg lg:text-[20px] font-medium'
+                              }`}
+                            >
+                              {line.romanization}
+                            </motion.p>
+                          )}
                         </div>
                       );
                     })}

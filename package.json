@@ -26,6 +26,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.2",
+    "wanakana": "^5.3.1",
     "wavesurfer.js": "^7.9.1",
     "zustand": "^5.0.5"
   },
@@ -55,29 +56,25 @@
     "vite-plugin-electron-renderer": "^1.0.0"
   },
   "build": {
-  "appId": "com.localspo.app",
-  "productName": "LocalSpo",
-
-  "directories": {
-    "output": "release"
-  },
-
-  "publish": [
-    {
-      "provider": "github",
-      "owner": "Fensacel",
-      "repo": "localspo"
+    "appId": "com.localspo.app",
+    "productName": "LocalSpo",
+    "directories": {
+      "output": "release"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Fensacel",
+        "repo": "localspo"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
-  ],
-
-  "win": {
-    "target": "nsis",
-    "icon": "public/logo.png"
-  },
-
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true
   }
-}
 }

@@ -133,7 +133,21 @@ export function SettingsPage() {
             enabled={seekByLyricsEnabled}
             onChange={(v) => updateSettings({ seekByLyricsEnabled: v })}
           />
-
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <p className="text-sm font-medium">Romanization</p>
+              <p className="text-xs text-text/30">Automatically convert non-Latin scripts (Korean, Japanese, Chinese, etc.)</p>
+            </div>
+            <select
+              value={useSettingsStore.getState().romanizationMode || 'auto'}
+              onChange={(e) => updateSettings({ romanizationMode: e.target.value as 'off' | 'auto' | 'always' })}
+              className="bg-zinc-800 text-white text-xs rounded-lg px-3 py-1.5 border border-white/10 outline-none focus:border-primary"
+            >
+              <option value="auto">Auto</option>
+              <option value="always">Always</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
         </SettingsSection>
 
         {/* About */}
