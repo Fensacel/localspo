@@ -16,7 +16,7 @@ You can download the latest installer `.exe` for Windows directly from the GitHu
 
 1. Go to the [**Releases Page**](https://github.com/Fensacel/localspo/releases/latest).
 2. Download `LocalSpo Setup X.X.X.exe` under **Assets**.
-3. Run the installer to install BlueTune on your Windows PC.
+3. Run the installer to install LocalSpo on your Windows PC.
 4. Enjoy your music with automatic lyrics, romanization, and built-in auto-updater!
 
 ---
