@@ -136,7 +136,7 @@ export function AlbumDetailPage() {
                   <span
                     className={`text-sm tabular-nums group-hover:hidden ${isCurrent ? 'text-primary' : 'text-text/25'}`}
                   >
-                    {song.track || index + 1}
+                    {index + 1}
                   </span>
                 )}
                 <button

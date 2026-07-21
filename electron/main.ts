@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { registerScannerIpc } from './scanner';
 import { registerDownloaderIpc } from './ipc/downloaderIpc';
+import { registerPlaylistSyncIpc } from './ipc/playlistSyncIpc';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -425,7 +426,8 @@ app.whenReady().then(() => {
   ensureDataFiles();
   registerIpcHandlers();
   registerScannerIpc(getDataPath);
-  registerDownloaderIpc(getDataPath);
+  const downloaderService = registerDownloaderIpc(getDataPath);
+  registerPlaylistSyncIpc(getDataPath, downloaderService);
   setupAutoUpdater();
   createWindow();
 

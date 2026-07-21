@@ -21,7 +21,7 @@ const defaultSettings: Settings = {
   lyricsEnabled: true,
   seekByLyricsEnabled: true,
   romanizationMode: 'auto',
-  lyricsDisplayMode: 'both',
+  lyricsDisplayMode: 'original',
   equalizerPreset: 'flat',
   equalizerBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   volume: 0.8,

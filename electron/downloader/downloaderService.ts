@@ -56,9 +56,14 @@ export interface DownloaderSettings {
   autoImport: boolean;
   concurrentDownloads: number;
   retryCount: number;
+  autoCreatePlaylist: boolean;
+  keepRemovedSongs: boolean;
+  autoEmbedMetadata: boolean;
+  autoSyncOnStartup: boolean;
+  syncIntervalMinutes: number;
 }
 
-export type DownloadStatus = 'queued' | 'downloading' | 'tagging' | 'completed' | 'failed' | 'cancelled';
+export type DownloadStatus = 'queued' | 'downloading' | 'tagging' | 'lyrics' | 'importing' | 'completed' | 'failed' | 'cancelled' | 'skipped';
 
 export interface DownloadItem {
   id: string;
@@ -76,6 +81,9 @@ export interface DownloadItem {
   outputPath?: string;
   addedAt: number;
   attempts: number;
+
+  // Playlist job linkage
+  playlistJobId?: string;
 
   // Extended ID3 Metadata
   releaseDate?: string;
@@ -116,7 +124,7 @@ export class DownloaderService {
     return [...this.queue];
   }
 
-  public async addUrl(urlStr: string): Promise<DownloadItem[]> {
+  public async addUrl(urlStr: string, playlistJobId?: string): Promise<DownloadItem[]> {
     let meta;
     if (YouTubeApiExtractor.parseUrl(urlStr)) {
       meta = await YouTubeApiExtractor.fetchMetadata(urlStr);
@@ -127,7 +135,9 @@ export class DownloaderService {
 
     for (const track of meta.tracks) {
       // Check if already in queue and completed/downloading
-      const existing = this.queue.find((item) => item.spotifyId === track.id && item.status !== 'failed');
+      const existing = this.queue.find(
+        (item) => item.spotifyId === track.id && item.status !== 'failed' && item.status !== 'cancelled',
+      );
       if (existing) {
         continue;
       }
@@ -146,6 +156,7 @@ export class DownloaderService {
         eta: '--:--',
         addedAt: Date.now(),
         attempts: 0,
+        playlistJobId,
 
         releaseDate: track.releaseDate,
         trackNumber: track.trackNumber,
@@ -167,6 +178,27 @@ export class DownloaderService {
     this.processQueue();
 
     return addedItems;
+  }
+
+  /**
+   * Check if a track already exists in the library by spotifyId, ISRC, or title+artist.
+   * Used for smart duplicate detection before queuing a download.
+   */
+  public checkDuplicate(
+    spotifyId: string,
+    isrc?: string,
+    title?: string,
+    artist?: string,
+  ): { exists: boolean; localPath?: string } {
+    // Check if already in queue as completed
+    const inQueue = this.queue.find(
+      (item) =>
+        (item.spotifyId === spotifyId || (isrc && item.isrc === isrc)) && item.status === 'completed',
+    );
+    if (inQueue) {
+      return { exists: true, localPath: inQueue.outputPath };
+    }
+    return { exists: false };
   }
 
   public cancelDownload(id: string): void {
@@ -455,9 +487,28 @@ export class DownloaderService {
       item.eta = '00:00';
       item.outputPath = targetFilePath;
 
+      // Persist to download history
+      this.appendToHistory({
+        id: item.id,
+        spotifyId: item.spotifyId,
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        coverUrl: item.coverUrl,
+        status: 'completed',
+        outputPath: targetFilePath,
+        downloadedAt: Date.now(),
+        playlistJobId: item.playlistJobId,
+      });
+
       // Auto-import into LocalSpo library if enabled
       if (this.settings.autoImport) {
         this.triggerAutoImport(downloadDir);
+      }
+
+      // Notify renderer of playlist job progress
+      if (item.playlistJobId) {
+        this.broadcastPlaylistTrackCompleted(item);
       }
     } catch (err: any) {
       console.error(`Download failed for ${item.title}:`, err);
@@ -467,6 +518,19 @@ export class DownloaderService {
       } else {
         item.status = 'failed';
         item.errorMessage = err?.message || 'Download error';
+        // Persist failure to history
+        this.appendToHistory({
+          id: item.id,
+          spotifyId: item.spotifyId,
+          title: item.title,
+          artist: item.artist,
+          album: item.album,
+          coverUrl: item.coverUrl,
+          status: 'failed',
+          errorMessage: item.errorMessage,
+          downloadedAt: Date.now(),
+          playlistJobId: item.playlistJobId,
+        });
       }
     }
 
@@ -517,6 +581,11 @@ export class DownloaderService {
       autoImport: true,
       concurrentDownloads: 2,
       retryCount: 3,
+      autoCreatePlaylist: true,
+      keepRemovedSongs: true,
+      autoEmbedMetadata: true,
+      autoSyncOnStartup: true,
+      syncIntervalMinutes: 0,
     };
 
     if (fs.existsSync(settingsPath)) {
@@ -564,4 +633,48 @@ export class DownloaderService {
       console.error('Error saving downloader queue:', err);
     }
   }
+
+  private appendToHistory(entry: {
+    id: string;
+    spotifyId: string;
+    title: string;
+    artist: string;
+    album: string;
+    coverUrl: string | null;
+    status: 'completed' | 'failed' | 'skipped';
+    outputPath?: string;
+    errorMessage?: string;
+    downloadedAt: number;
+    playlistJobId?: string;
+  }): void {
+    const historyPath = path.join(this.getDataPath(), 'downloader_history.json');
+    let history: typeof entry[] = [];
+    if (fs.existsSync(historyPath)) {
+      try {
+        history = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+      } catch {}
+    }
+    // Keep max 1000 history entries (FIFO)
+    history.unshift(entry);
+    if (history.length > 1000) history = history.slice(0, 1000);
+    try {
+      fs.writeFileSync(historyPath, JSON.stringify(history, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Error saving download history:', err);
+    }
+  }
+
+  private broadcastPlaylistTrackCompleted(item: DownloadItem): void {
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length > 0) {
+      windows[0].webContents.send('downloader:playlistTrackCompleted', {
+        playlistJobId: item.playlistJobId,
+        spotifyId: item.spotifyId,
+        outputPath: item.outputPath,
+        title: item.title,
+        artist: item.artist,
+      });
+    }
+  }
 }
+

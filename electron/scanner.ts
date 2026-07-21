@@ -9,6 +9,20 @@ const SUPPORTED_EXTENSIONS = new Set([
   '.flac', '.mp3', '.aac', '.alac', '.wav', '.aiff', '.ogg', '.m4a',
 ]);
 
+function splitArtists(artistStr: string): string[] {
+  if (!artistStr) return [];
+  const clean = artistStr
+    .replace(/\bfeat\.?\b/gi, ',')
+    .replace(/\bft\.?\b/gi, ',')
+    .replace(/\bfeaturing\b/gi, ',')
+    .replace(/\s+&\s+/g, ',');
+  
+  return clean
+    .split(/[;,]/)
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0 && name.toLowerCase() !== 'unknown artist');
+}
+
 interface ScanResult {
   filePath: string;
   hash: string;
@@ -420,14 +434,6 @@ export function registerScannerIpc(getDataPath: () => string): void {
         const albumKey = `${albumTitle.toLowerCase()}::${albumArtist.toLowerCase()}`;
         const albumId = crypto.createHash('md5').update(albumKey).digest('hex').slice(0, 12);
 
-        // Artist ID
-        const artistKey = `artist::${songArtist.toLowerCase()}`;
-        const artistId = crypto.createHash('md5').update(artistKey).digest('hex').slice(0, 12);
-
-        // Album Artist ID
-        const albumArtistKey = `artist::${albumArtist.toLowerCase()}`;
-        const albumArtistId = crypto.createHash('md5').update(albumArtistKey).digest('hex').slice(0, 12);
-
         // Update album map
         if (!albumMap.has(albumId)) {
           albumMap.set(albumId, {
@@ -455,41 +461,68 @@ export function registerScannerIpc(getDataPath: () => string): void {
           }
         }
 
-        // Update artist map
-        if (!artistMap.has(artistId)) {
-          artistMap.set(artistId, {
-            id: artistId,
-            name: songArtist,
-            coverPath,
-            albumIds: [albumId],
-            songIds: [songId],
-            totalSongs: 1,
-            totalAlbums: 1,
-          });
-        } else {
-          const existing = artistMap.get(artistId)!;
-          const songIds = existing['songIds'] as string[];
-          const albumIds = existing['albumIds'] as string[];
-          if (!songIds.includes(songId)) {
-            songIds.push(songId);
-            existing['totalSongs'] = songIds.length;
-          }
-          if (!albumIds.includes(albumId)) {
-            albumIds.push(albumId);
-            existing['totalAlbums'] = albumIds.length;
+        // Update artist map (with splitting)
+        const songArtists = splitArtists(songArtist);
+        const albumArtists = splitArtists(albumArtist);
+
+        // Process all song artists
+        for (const indArtist of songArtists) {
+          const artistKey = `artist::${indArtist.toLowerCase()}`;
+          const artistId = crypto.createHash('md5').update(artistKey).digest('hex').slice(0, 12);
+
+          if (!artistMap.has(artistId)) {
+            artistMap.set(artistId, {
+              id: artistId,
+              name: indArtist,
+              coverPath,
+              albumIds: [albumId],
+              songIds: [songId],
+              totalSongs: 1,
+              totalAlbums: 1,
+            });
+          } else {
+            const existing = artistMap.get(artistId)!;
+            const songIds = existing['songIds'] as string[];
+            const albumIds = existing['albumIds'] as string[];
+            if (!songIds.includes(songId)) {
+              songIds.push(songId);
+              existing['totalSongs'] = songIds.length;
+            }
+            if (!albumIds.includes(albumId)) {
+              albumIds.push(albumId);
+              existing['totalAlbums'] = albumIds.length;
+            }
           }
         }
 
-        if (albumArtistId !== artistId && !artistMap.has(albumArtistId)) {
-          artistMap.set(albumArtistId, {
-            id: albumArtistId,
-            name: albumArtist,
-            coverPath,
-            albumIds: [albumId],
-            songIds: [songId],
-            totalSongs: 1,
-            totalAlbums: 1,
-          });
+        // Process all album artists
+        for (const indAlbumArtist of albumArtists) {
+          const albumArtistKey = `artist::${indAlbumArtist.toLowerCase()}`;
+          const albumArtistId = crypto.createHash('md5').update(albumArtistKey).digest('hex').slice(0, 12);
+
+          if (!artistMap.has(albumArtistId)) {
+            artistMap.set(albumArtistId, {
+              id: albumArtistId,
+              name: indAlbumArtist,
+              coverPath,
+              albumIds: [albumId],
+              songIds: [songId],
+              totalSongs: 1,
+              totalAlbums: 1,
+            });
+          } else {
+            const existing = artistMap.get(albumArtistId)!;
+            const songIds = existing['songIds'] as string[];
+            const albumIds = existing['albumIds'] as string[];
+            if (!songIds.includes(songId)) {
+              songIds.push(songId);
+              existing['totalSongs'] = songIds.length;
+            }
+            if (!albumIds.includes(albumId)) {
+              albumIds.push(albumId);
+              existing['totalAlbums'] = albumIds.length;
+            }
+          }
         }
       }
 
@@ -765,14 +798,6 @@ export function registerScannerIpc(getDataPath: () => string): void {
             const albumKey = `${albumTitle.toLowerCase()}::${albumArtist.toLowerCase()}`;
             const albumId = crypto.createHash('md5').update(albumKey).digest('hex').slice(0, 12);
 
-            // Artist ID
-            const artistKey = `artist::${songArtist.toLowerCase()}`;
-            const artistId = crypto.createHash('md5').update(artistKey).digest('hex').slice(0, 12);
-
-            // Album Artist ID
-            const albumArtistKey = `artist::${albumArtist.toLowerCase()}`;
-            const albumArtistId = crypto.createHash('md5').update(albumArtistKey).digest('hex').slice(0, 12);
-
             // Update album map
             if (!albumMap.has(albumId)) {
               albumMap.set(albumId, {
@@ -800,41 +825,68 @@ export function registerScannerIpc(getDataPath: () => string): void {
               }
             }
 
-            // Update artist map
-            if (!artistMap.has(artistId)) {
-              artistMap.set(artistId, {
-                id: artistId,
-                name: songArtist,
-                coverPath,
-                albumIds: [albumId],
-                songIds: [songId],
-                totalSongs: 1,
-                totalAlbums: 1,
-              });
-            } else {
-              const existing = artistMap.get(artistId)!;
-              const songIds = existing['songIds'] as string[];
-              const albumIds = existing['albumIds'] as string[];
-              if (!songIds.includes(songId)) {
-                songIds.push(songId);
-                existing['totalSongs'] = songIds.length;
-              }
-              if (!albumIds.includes(albumId)) {
-                albumIds.push(albumId);
-                existing['totalAlbums'] = albumIds.length;
+            // Update artist map (with splitting)
+            const songArtists = splitArtists(songArtist);
+            const albumArtists = splitArtists(albumArtist);
+
+            // Process all song artists
+            for (const indArtist of songArtists) {
+              const artistKey = `artist::${indArtist.toLowerCase()}`;
+              const artistId = crypto.createHash('md5').update(artistKey).digest('hex').slice(0, 12);
+
+              if (!artistMap.has(artistId)) {
+                artistMap.set(artistId, {
+                  id: artistId,
+                  name: indArtist,
+                  coverPath,
+                  albumIds: [albumId],
+                  songIds: [songId],
+                  totalSongs: 1,
+                  totalAlbums: 1,
+                });
+              } else {
+                const existing = artistMap.get(artistId)!;
+                const songIds = existing['songIds'] as string[];
+                const albumIds = existing['albumIds'] as string[];
+                if (!songIds.includes(songId)) {
+                  songIds.push(songId);
+                  existing['totalSongs'] = songIds.length;
+                }
+                if (!albumIds.includes(albumId)) {
+                  albumIds.push(albumId);
+                  existing['totalAlbums'] = albumIds.length;
+                }
               }
             }
 
-            if (albumArtistId !== artistId && !artistMap.has(albumArtistId)) {
-              artistMap.set(albumArtistId, {
-                id: albumArtistId,
-                name: albumArtist,
-                coverPath,
-                albumIds: [albumId],
-                songIds: [songId],
-                totalSongs: 1,
-                totalAlbums: 1,
-              });
+            // Process all album artists
+            for (const indAlbumArtist of albumArtists) {
+              const albumArtistKey = `artist::${indAlbumArtist.toLowerCase()}`;
+              const albumArtistId = crypto.createHash('md5').update(albumArtistKey).digest('hex').slice(0, 12);
+
+              if (!artistMap.has(albumArtistId)) {
+                artistMap.set(albumArtistId, {
+                  id: albumArtistId,
+                  name: indAlbumArtist,
+                  coverPath,
+                  albumIds: [albumId],
+                  songIds: [songId],
+                  totalSongs: 1,
+                  totalAlbums: 1,
+                });
+              } else {
+                const existing = artistMap.get(albumArtistId)!;
+                const songIds = existing['songIds'] as string[];
+                const albumIds = existing['albumIds'] as string[];
+                if (!songIds.includes(songId)) {
+                  songIds.push(songId);
+                  existing['totalSongs'] = songIds.length;
+                }
+                if (!albumIds.includes(albumId)) {
+                  albumIds.push(albumId);
+                  existing['totalAlbums'] = albumIds.length;
+                }
+              }
             }
           }
 

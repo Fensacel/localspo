@@ -41,6 +41,7 @@ export function useScanner() {
         platformService.scanner.getLibrary().then((libData: unknown) => {
           if (libData) {
             setLibraryData(libData as LibraryData);
+            window.dispatchEvent(new CustomEvent('spotify:libraryScanCompleted'));
           }
         });
       }

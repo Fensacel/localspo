@@ -83,6 +83,12 @@ export interface Playlist {
   updatedAt: number;
   isPinned: boolean;
   isFavorite: boolean;
+
+  // Spotify linkage (optional — only set for Spotify-synced playlists)
+  spotifyId?: string;
+  spotifyOwner?: string;
+  spotifyDescription?: string;
+  lastSpotifySync?: number;
 }
 
 // ─── History Entry ──────────────────────────────────────

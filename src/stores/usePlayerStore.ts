@@ -95,7 +95,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   showNowPlaying: false,
   showNowPlayingSidebar: false,
 
-  setCurrentSong: (song) => set({ currentSong: song, showNowPlayingSidebar: true }),
+  setCurrentSong: (song) => set({ currentSong: song }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setCurrentTime: (currentTime) => set({ currentTime }),
   setDuration: (duration) => set({ duration }),
@@ -159,7 +159,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentSong: queue[queueIndex] ?? null,
       isPlaying: true,
       sourceName: sourceName ?? null,
-      showNowPlayingSidebar: true,
     });
     console.log(get().currentSong);
   },
@@ -253,14 +252,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     const nextSong = queue[nextIndex];
+    const isSameSong = state.currentSong?.id === nextSong?.id;
+
     set({
       queueIndex: nextIndex,
       currentSong: nextSong,
       currentTime: 0,
       isPlaying: true,
-      showNowPlayingSidebar: true,
       history: state.currentSong ? [...state.history, state.currentSong] : state.history,
     });
+
+    if (isSameSong) {
+      window.dispatchEvent(new CustomEvent('player:seek', { detail: 0 }));
+    }
     return nextSong;
   },
 
@@ -273,6 +277,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // If more than 3 seconds in, restart current song
     if (currentTime > 3) {
       set({ currentTime: 0 });
+      window.dispatchEvent(new CustomEvent('player:seek', { detail: 0 }));
       return state.currentSong;
     }
 
@@ -284,7 +289,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentSong: prevSong,
       currentTime: 0,
       isPlaying: true,
-      showNowPlayingSidebar: true,
     });
     return prevSong;
   },
@@ -319,7 +323,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       else if (nextMode === 'one') msg = 'Repeat one song';
       useToastStore.getState().showToast(msg, 'info');
 
-      return { repeatMode: nextMode };
+      const updates: Partial<PlayerState> = { repeatMode: nextMode };
+
+      // If turning repeat on and we reached the end of the queue (or it stopped),
+      // reset to the first song in queue and start playing.
+      if ((nextMode === 'all' || nextMode === 'one') && state.queue.length > 0) {
+        const isAtEnd = state.queueIndex === state.queue.length - 1 || state.queueIndex === -1;
+        if (isAtEnd && !state.isPlaying) {
+          updates.queueIndex = 0;
+          updates.currentSong = state.queue[0];
+          updates.currentTime = 0;
+          updates.isPlaying = true;
+        }
+      }
+
+      return updates;
     }),
 
   toggleShuffle: () =>

@@ -120,7 +120,7 @@ export function HistoryPage() {
         historySongs.length > 0 ? (
           <div className="space-y-1">
             {historySongs.map((song, index) => {
-              const isCurrent = currentSong?.id === song.id;
+              const isCurrent = index === 0 && currentSong?.id === song.id;
               const coverSrc = song.coverPath
                 ? `local-image://${encodeURIComponent(song.coverPath)}`
                 : null;

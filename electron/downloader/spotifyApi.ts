@@ -26,6 +26,8 @@ export interface SpotifyCollectionMeta {
   id: string;
   title: string;
   artist?: string;
+  owner?: string;
+  description?: string;
   coverUrl: string | null;
   tracks: SpotifyTrackMeta[];
 }
@@ -37,18 +39,38 @@ export class SpotifyApiExtractor {
     if (this.cachedAccessToken && Date.now() < this.cachedAccessToken.expiresAt) {
       return this.cachedAccessToken.token;
     }
+
+    // Primary Strategy: Fetch a known-valid track embed page and extract the access token from the session state
     try {
-      const res = await this.httpGetJson('https://open.spotify.com/get_access_token?reason=transport&productType=web_player');
-      if (res && res.accessToken) {
-        this.cachedAccessToken = {
-          token: res.accessToken,
-          expiresAt: Date.now() + (res.accessTokenExpirationTimestampMs ? res.accessTokenExpirationTimestampMs - Date.now() - 60000 : 3000000),
-        };
-        return res.accessToken;
+      const embedUrl = 'https://open.spotify.com/embed/track/7ouMYWpwJ422jRcDASZB7P';
+      const res = await fetch(embedUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+        }
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const match = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+        if (match) {
+          const data = JSON.parse(match[1]);
+          const token = data?.props?.pageProps?.state?.settings?.session?.accessToken;
+          const expiresAt = data?.props?.pageProps?.state?.settings?.session?.accessTokenExpirationTimestampMs;
+          if (token) {
+            this.cachedAccessToken = {
+              token,
+              expiresAt: expiresAt ? expiresAt - 60000 : Date.now() + 3000000,
+            };
+            console.log('[Spotify] Successfully retrieved anonymous access token');
+            return token;
+          }
+        }
       }
     } catch (e) {
-      console.warn('Failed fetching Spotify web player token:', e);
+      console.warn('[Spotify] Failed retrieving token from track embed page:', e);
     }
+
+    console.error('[Spotify] All token strategies failed');
     return null;
   }
 
@@ -226,13 +248,81 @@ export class SpotifyApiExtractor {
     }
 
     // Enrich all tracks with extended metadata from Spotify Web API
-    await this.enrichTracksWithWebApi(collection.tracks);
+    if (type !== 'playlist') {
+      await this.enrichTracksWithWebApi(collection.tracks);
+    }
 
     return collection;
   }
 
   private static async fetchSingleTrack(id: string): Promise<SpotifyTrackMeta> {
     const pageUrl = `https://open.spotify.com/track/${id}`;
+    
+    // 1. Try to fetch metadata using partner GraphQL API
+    const token = await this.getAnonymousAccessToken();
+    if (token) {
+      try {
+        const partnerUrl = 'https://api-partner.spotify.com/pathfinder/v1/query';
+        const params = new URLSearchParams({
+          operationName: 'getTrack',
+          variables: JSON.stringify({
+            uri: `spotify:track:${id}`
+          }),
+          extensions: JSON.stringify({
+            persistedQuery: {
+              version: 1,
+              sha256Hash: '612585ae06ba435ad26369870deaae23b5c8800a256cd8a57e08eddc25a37294',
+            }
+          })
+        });
+
+        const res = await fetch(`${partnerUrl}?${params.toString()}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'app-platform': 'WebPlayer',
+          }
+        });
+
+        if (res.ok) {
+          const resJson: any = await res.json();
+          const track = resJson?.data?.trackUnion;
+          if (track && track.__typename === 'Track') {
+            const title = track.name || 'Unknown Track';
+            const firstArtists = track.firstArtist?.items?.map((a: any) => a.profile?.name).filter(Boolean) || [];
+            const otherArtists = track.otherArtists?.items?.map((a: any) => a.profile?.name).filter(Boolean) || [];
+            const artists = [...firstArtists, ...otherArtists];
+            if (artists.length === 0) artists.push('Unknown Artist');
+
+            const albumOfTrack = track.albumOfTrack || {};
+            const albumName = albumOfTrack.name || title;
+            const coverSources = albumOfTrack.coverArt?.sources || [];
+            const coverUrl = coverSources.length > 0 ? coverSources[0].url : null;
+            const durationMs = track.duration?.totalMilliseconds || 0;
+            const releaseDate = albumOfTrack.date?.isoString || undefined;
+
+            return {
+              id,
+              spotifyUrl: pageUrl,
+              title,
+              artist: artists.join(', '),
+              artistNames: artists,
+              album: albumName,
+              coverUrl,
+              durationMs,
+              releaseDate,
+              trackNumber: track.trackNumber || 1,
+              discNumber: track.discNumber || 1,
+              type: 'track',
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[Spotify] GraphQL fetchSingleTrack failed, falling back to embed parsing:', err);
+      }
+    }
+
+    // 2. Fallback: Parse embed page JSON or initialState
     const html = await this.httpGet(pageUrl);
 
     // Try parsing initialState script tag
@@ -256,7 +346,7 @@ export class SpotifyApiExtractor {
       const embedScriptMatch = embedHtml.match(/<script id="__NEXT_DATA__"\s+type="application\/json">\s*(.+?)\s*<\/script>/s);
       if (embedScriptMatch && embedScriptMatch[1]) {
         const embedJson = JSON.parse(embedScriptMatch[1]);
-        const trackData = embedJson?.props?.pageProps?.state?.data?.entity;
+        const trackData = embedJson?.props?.pageProps?.state?.data?.entity || embedJson?.props?.pageProps?.state?.entity;
         if (trackData) {
           const title = trackData.title || trackData.name || 'Unknown Title';
           const artists = trackData.artists?.map((a: any) => a.name) || [trackData.artist || 'Unknown Artist'];
@@ -389,7 +479,7 @@ export class SpotifyApiExtractor {
     const embedScriptMatch = embedHtml.match(/<script id="__NEXT_DATA__"\s+type="application\/json">\s*(.+?)\s*<\/script>/s);
     if (embedScriptMatch && embedScriptMatch[1]) {
       const embedJson = JSON.parse(embedScriptMatch[1]);
-      const entity = embedJson?.props?.pageProps?.state?.data?.entity;
+      const entity = embedJson?.props?.pageProps?.state?.data?.entity || embedJson?.props?.pageProps?.state?.entity;
       if (entity) {
         const albumTitle = entity.title || entity.name || 'Unknown Album';
         const albumArtist = entity.artists?.map((a: any) => a.name).join(', ') || entity.artist || 'Unknown Artist';
@@ -397,16 +487,18 @@ export class SpotifyApiExtractor {
         const trackList = entity.trackList || [];
 
         const tracks: SpotifyTrackMeta[] = trackList.map((t: any, idx: number) => {
-          const artists = t.artists?.map((a: any) => a.name) || [t.subtitle || albumArtist];
+          const wrapper = t;
+          const track = wrapper.track || wrapper;
+          const artists = track.artists?.map((a: any) => a.name) || [track.subtitle || albumArtist];
           return {
-            id: t.uri?.split(':')?.[2] || `${id}_${idx}`,
-            spotifyUrl: t.uri?.startsWith('spotify:track:') ? `https://open.spotify.com/track/${t.uri.split(':')[2]}` : pageUrl,
-            title: t.title || t.name || `Track ${idx + 1}`,
+            id: track.uri?.split(':')?.[2] || track.id || `${id}_${idx}`,
+            spotifyUrl: track.uri?.startsWith('spotify:track:') ? `https://open.spotify.com/track/${track.uri.split(':')[2]}` : pageUrl,
+            title: track.title || track.name || `Track ${idx + 1}`,
             artist: artists.join(', '),
             artistNames: artists,
             album: albumTitle,
             coverUrl,
-            durationMs: t.duration || 0,
+            durationMs: track.duration || track.durationMs || 0,
             trackNumber: idx + 1,
             type: 'track',
           };
@@ -428,113 +520,149 @@ export class SpotifyApiExtractor {
 
   private static async fetchPlaylist(id: string): Promise<SpotifyCollectionMeta> {
     const pageUrl = `https://open.spotify.com/playlist/${id}`;
-    const html = await this.httpGet(pageUrl);
+    
+    // 1. Fetch embed page to get basic playlist details
+    const embedHtml = await this.httpGet(`https://open.spotify.com/embed/playlist/${id}`);
+    const embedScriptMatch = embedHtml.match(/<script id="__NEXT_DATA__"\s+type="application\/json">\s*(.+?)\s*<\/script>/s);
+    if (!embedScriptMatch || !embedScriptMatch[1]) {
+      throw new Error(`Could not fetch metadata for Spotify Playlist ${id}`);
+    }
 
-    // Try initialState base64
-    const initialStateMatch = html.match(/<script\s+id="initialState"\s+type="text\/plain">\s*(.+?)\s*<\/script>/s);
-    if (initialStateMatch && initialStateMatch[1]) {
+    const embedJson = JSON.parse(embedScriptMatch[1]);
+    const entity = embedJson?.props?.pageProps?.state?.data?.entity || embedJson?.props?.pageProps?.state?.entity;
+    if (!entity) {
+      throw new Error(`Could not find playlist entity for ${id}`);
+    }
+
+    const playlistTitle = entity.title || entity.name || 'Unknown Playlist';
+    const playlistCoverUrl = entity.coverArt?.sources?.[0]?.url || entity.images?.[0]?.url || null;
+    const owner = entity.owner?.displayName || entity.owner?.id || '';
+    const description = entity.description || '';
+
+    // 2. Fetch tracks using the partner GraphQL API with pagination to get the correct metadata
+    const tracks: SpotifyTrackMeta[] = [];
+    const token = await this.getAnonymousAccessToken();
+    
+    if (token) {
       try {
-        const decoded = Buffer.from(initialStateMatch[1], 'base64').toString('utf-8');
-        const json = JSON.parse(decoded);
-        const playlistEntity = json?.entities?.items?.[`spotify:playlist:${id}`] || json?.entities?.items?.[id];
-        if (playlistEntity) {
-          const playlistTitle = playlistEntity.name || 'Unknown Playlist';
-          const coverUrl = playlistEntity.images?.[0]?.url || null;
+        let offset = 0;
+        const limit = 100;
+        while (true) {
+          const partnerUrl = 'https://api-partner.spotify.com/pathfinder/v1/query';
+          const params = new URLSearchParams({
+            operationName: 'fetchPlaylist',
+            variables: JSON.stringify({
+              uri: `spotify:playlist:${id}`,
+              offset,
+              limit,
+              enableWatchFeedEntrypoint: false,
+              includeEpisodeContentRatingsV2: false,
+            }),
+            extensions: JSON.stringify({
+              persistedQuery: {
+                version: 1,
+                sha256Hash: 'a65e12194ed5fc443a1cdebed5fabe33ca5b07b987185d63c72483867ad13cb4',
+              }
+            })
+          });
 
-          const rawTracks = playlistEntity.tracks?.items || playlistEntity.contents?.items || [];
-          const tracks: SpotifyTrackMeta[] = [];
-          
-          for (let i = 0; i < rawTracks.length; i++) {
-            const item = rawTracks[i];
-            const track = item.track || item;
-            if (!track || !track.name) continue;
+          const res = await fetch(`${partnerUrl}?${params.toString()}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'app-platform': 'WebPlayer',
+            }
+          });
 
-            const artists = track.artists?.map((a: any) => a.name) || ['Unknown Artist'];
+          if (!res.ok) {
+            throw new Error(`GraphQL HTTP error ${res.status}`);
+          }
+
+          const resJson: any = await res.json();
+          const playlistV2 = resJson?.data?.playlistV2;
+          const content = playlistV2?.content;
+          const items = content?.items || [];
+
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const trackData = item?.itemV2?.data;
+            if (!trackData || trackData.__typename !== 'Track') continue;
+
+            const tId = trackData.uri?.startsWith('spotify:track:') ? trackData.uri.split(':')[2] : trackData.id;
+            const artists = trackData.artists?.items?.map((a: any) => a.profile?.name).filter(Boolean) || ['Unknown Artist'];
+            const albumOfTrack = trackData.albumOfTrack || {};
+            const albumName = albumOfTrack.name || playlistTitle;
+            
+            // cover sources
+            const coverSources = albumOfTrack.coverArt?.sources || [];
+            let trackCoverUrl = coverSources.length > 0 ? coverSources[0].url : playlistCoverUrl;
+
             tracks.push({
-              id: track.id || `${id}_${i}`,
-              spotifyUrl: track.id ? `https://open.spotify.com/track/${track.id}` : pageUrl,
-              title: track.name,
+              id: tId || `${id}_${offset + i}`,
+              spotifyUrl: tId ? `https://open.spotify.com/track/${tId}` : `https://open.spotify.com/playlist/${id}`,
+              title: trackData.name || 'Unknown Track',
               artist: artists.join(', '),
               artistNames: artists,
-              album: track.album?.name || playlistTitle,
-              coverUrl: track.album?.images?.[0]?.url || coverUrl,
-              durationMs: track.duration_ms || track.durationMs || 0,
-              trackNumber: i + 1,
+              album: albumName,
+              coverUrl: trackCoverUrl,
+              durationMs: trackData.trackDuration?.totalMilliseconds || 0,
+              trackNumber: offset + i + 1,
               type: 'track',
             });
           }
 
-          return {
-            type: 'playlist',
-            id,
-            title: playlistTitle,
-            coverUrl,
-            tracks,
-          };
-        }
-      } catch (e) {
-        console.warn('Failed parsing playlist initialState:', e);
-      }
-    }
-
-    // Try embed page
-    const embedHtml = await this.httpGet(`https://open.spotify.com/embed/playlist/${id}`);
-    const embedScriptMatch = embedHtml.match(/<script id="__NEXT_DATA__"\s+type="application\/json">\s*(.+?)\s*<\/script>/s);
-    if (embedScriptMatch && embedScriptMatch[1]) {
-      const embedJson = JSON.parse(embedScriptMatch[1]);
-      const entity = embedJson?.props?.pageProps?.state?.data?.entity;
-      if (entity) {
-        const playlistTitle = entity.title || entity.name || 'Unknown Playlist';
-        const playlistCoverUrl = entity.coverArt?.sources?.[0]?.url || null;
-        const trackList = entity.trackList || [];
-
-        const tracks: SpotifyTrackMeta[] = [];
-        for (let idx = 0; idx < trackList.length; idx++) {
-          const t = trackList[idx];
-          const trackId = t.uri?.startsWith('spotify:track:') ? t.uri.split(':')[2] : (t.id || null);
-          const artists = t.subtitle ? [t.subtitle] : ['Unknown Artist'];
-
-          let trackCoverUrl =
-            t.album?.images?.[0]?.url ||
-            t.album?.coverArt?.sources?.[0]?.url ||
-            t.coverArt?.sources?.[0]?.url ||
-            t.visualIdentity?.imageRight?.[0]?.url ||
-            null;
-
-          if (!trackCoverUrl && trackId) {
-            try {
-              const oembed = await this.httpGetJson(`https://open.spotify.com/oembed?url=https://open.spotify.com/track/${trackId}`);
-              if (oembed && oembed.thumbnail_url) {
-                trackCoverUrl = oembed.thumbnail_url;
-              }
-            } catch {}
+          const total = content?.totalCount || 0;
+          offset += items.length;
+          if (items.length === 0 || offset >= total) {
+            break;
           }
-
-          tracks.push({
-            id: trackId || `${id}_${idx}`,
-            spotifyUrl: trackId ? `https://open.spotify.com/track/${trackId}` : pageUrl,
-            title: t.title || t.name || `Track ${idx + 1}`,
-            artist: artists.join(', '),
-            artistNames: artists,
-            album: t.album?.name || playlistTitle,
-            coverUrl: trackCoverUrl || playlistCoverUrl,
-            durationMs: t.duration || 0,
-            trackNumber: idx + 1,
-            type: 'track',
-          });
         }
-
-        return {
-          type: 'playlist',
-          id,
-          title: playlistTitle,
-          coverUrl: playlistCoverUrl,
-          tracks,
-        };
+      } catch (err) {
+        console.warn('[Spotify] GraphQL playlist tracks fetch failed, falling back to embed parsing:', err);
       }
     }
 
-    throw new Error(`Could not fetch metadata for Spotify Playlist ${id}`);
+    // 3. Fallback: Parse tracks from embed page if GraphQL failed or returned nothing
+    if (tracks.length === 0) {
+      const trackList = entity.trackList || [];
+      for (let idx = 0; idx < trackList.length; idx++) {
+        const wrapper = trackList[idx];
+        const track = wrapper.track || wrapper;
+        const trackId = track.uri?.startsWith('spotify:track:') ? track.uri.split(':')[2] : (track.id || null);
+        const subtitle = wrapper.subtitle || track.subtitle;
+        const artists = subtitle ? [subtitle] : (track.artists?.map((a: any) => a.name) || ['Unknown Artist']);
+
+        let trackCoverUrl =
+          track.album?.images?.[0]?.url ||
+          track.album?.coverArt?.sources?.[0]?.url ||
+          track.coverArt?.sources?.[0]?.url ||
+          track.visualIdentity?.imageRight?.[0]?.url ||
+          null;
+
+        tracks.push({
+          id: trackId || `${id}_${idx}`,
+          spotifyUrl: trackId ? `https://open.spotify.com/track/${trackId}` : pageUrl,
+          title: track.title || track.name || `Track ${idx + 1}`,
+          artist: artists.join(', '),
+          artistNames: artists,
+          album: track.album?.name || playlistTitle,
+          coverUrl: trackCoverUrl || playlistCoverUrl,
+          durationMs: track.duration || track.durationMs || 0,
+          trackNumber: idx + 1,
+          type: 'track',
+        });
+      }
+    }
+
+    return {
+      type: 'playlist',
+      id,
+      title: playlistTitle,
+      owner,
+      description,
+      coverUrl: playlistCoverUrl,
+      tracks,
+    };
   }
 
   private static formatTrackEntity(entity: any, id: string): SpotifyTrackMeta {
@@ -584,4 +712,72 @@ export class SpotifyApiExtractor {
     if (!res.ok) return null;
     return await res.json();
   }
+
+  // ─── Spotify Search ──────────────────────────────────────────────────────────
+
+  public static async searchSpotify(
+    query: string,
+    types: ('track' | 'album' | 'artist' | 'playlist')[] = ['track', 'album', 'artist', 'playlist'],
+    limit = 20,
+  ): Promise<{
+    tracks: any[];
+    albums: any[];
+    artists: any[];
+    playlists: any[];
+  }> {
+    const token = await this.getAnonymousAccessToken();
+    if (!token) throw new Error('Could not obtain Spotify access token');
+
+    const typeStr = types.join(',');
+    const encodedQuery = encodeURIComponent(query);
+    const url = `https://api.spotify.com/v1/search?q=${encodedQuery}&type=${typeStr}&limit=${limit}`;
+
+    const res = await this.httpGetJson(url, {
+      Authorization: `Bearer ${token}`,
+    });
+
+    if (!res) throw new Error('Empty search response from Spotify');
+
+    const tracks = (res.tracks?.items || []).filter(Boolean).map((t: any) => ({
+      id: t.id,
+      title: t.name,
+      artist: t.artists?.map((a: any) => a.name).join(', ') || 'Unknown Artist',
+      artistNames: t.artists?.map((a: any) => a.name) || [],
+      album: t.album?.name || '',
+      coverUrl: t.album?.images?.[0]?.url || null,
+      durationMs: t.duration_ms || 0,
+      spotifyUrl: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+    }));
+
+    const albums = (res.albums?.items || []).filter(Boolean).map((a: any) => ({
+      id: a.id,
+      name: a.name,
+      artist: a.artists?.map((ar: any) => ar.name).join(', ') || 'Unknown Artist',
+      coverUrl: a.images?.[0]?.url || null,
+      trackCount: a.total_tracks || 0,
+      releaseDate: a.release_date || '',
+      spotifyUrl: a.external_urls?.spotify || `https://open.spotify.com/album/${a.id}`,
+    }));
+
+    const artists = (res.artists?.items || []).filter(Boolean).map((ar: any) => ({
+      id: ar.id,
+      name: ar.name,
+      coverUrl: ar.images?.[0]?.url || null,
+      genres: ar.genres || [],
+      spotifyUrl: ar.external_urls?.spotify || `https://open.spotify.com/artist/${ar.id}`,
+    }));
+
+    const playlists = (res.playlists?.items || []).filter(Boolean).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      owner: p.owner?.display_name || p.owner?.id || '',
+      coverUrl: p.images?.[0]?.url || null,
+      trackCount: p.tracks?.total || 0,
+      spotifyUrl: p.external_urls?.spotify || `https://open.spotify.com/playlist/${p.id}`,
+    }));
+
+    return { tracks, albums, artists, playlists };
+  }
 }
+

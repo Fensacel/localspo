@@ -150,4 +150,139 @@ if (typeof window !== 'undefined' && window.electronAPI?.downloader) {
       console.error('Auto import scan error:', err);
     }
   });
+
+  // Auto playlist creation helper with race condition prevention
+  const activeSyncJobs = new Set<string>();
+  const createdPlaylistsCache = new Map<string, string>(); // spotifyId -> localPlaylistId or 'PENDING'
+
+  const syncPlaylistJobLocal = async (playlistJobId: string) => {
+    if (activeSyncJobs.has(playlistJobId)) {
+      return;
+    }
+
+    if (createdPlaylistsCache.get(playlistJobId) === 'PENDING') {
+      return;
+    }
+
+    activeSyncJobs.add(playlistJobId);
+
+    try {
+      const { queue } = useDownloaderStore.getState();
+      const settings = useDownloaderStore.getState().settings;
+      if (!settings?.autoCreatePlaylist) return;
+
+      const jobTracks = queue.filter((i) => i.playlistJobId === playlistJobId);
+      const pendingTracks = jobTracks.filter(
+        (i) => i.status === 'queued' || i.status === 'downloading' || i.status === 'tagging',
+      );
+
+      // Only proceed when all tracks in this job are completed, failed, or cancelled
+      if (pendingTracks.length > 0 || jobTracks.length === 0) return;
+
+      // Import stores dynamically to avoid circular dependencies
+      const { usePlaylistStore } = await import('@/stores/usePlaylistStore');
+      const { useSpotifyStore } = await import('./useSpotifyStore');
+      const { useLibraryStore } = await import('@/stores/useLibraryStore');
+
+      const linkedPlaylists = useSpotifyStore.getState().linkedPlaylists;
+      const linkedPlaylist = linkedPlaylists.find((p) => p.spotifyId === playlistJobId);
+      if (!linkedPlaylist) return;
+
+      const completedTracks = jobTracks.filter((i) => i.status === 'completed' && i.outputPath);
+      if (completedTracks.length === 0) return;
+
+      const allSongs = useLibraryStore.getState().songs;
+      const songIds: string[] = [];
+      for (const track of completedTracks) {
+        if (!track.outputPath) continue;
+        const normalizedPath = track.outputPath.replace(/\\/g, '/').toLowerCase();
+        const match = allSongs.find(
+          (s) => s.path && s.path.replace(/\\/g, '/').toLowerCase() === normalizedPath,
+        );
+        if (match) songIds.push(match.id);
+      }
+
+      // If we matched no songs, it means the scanner hasn't indexed them yet.
+      // We will try again when a scanner done event is fired.
+      if (songIds.length === 0) {
+        console.log(`[AutoPlaylist] No songs indexed yet for job ${playlistJobId}, waiting for scanner...`);
+        return;
+      }
+
+      const { playlists, createPlaylist, addSongToPlaylist, updatePlaylist } = usePlaylistStore.getState();
+
+      const cachedLocalId = createdPlaylistsCache.get(playlistJobId);
+      let existingLocal = cachedLocalId && cachedLocalId !== 'PENDING'
+        ? playlists.find((p) => p.id === cachedLocalId)
+        : null;
+
+      if (!existingLocal) {
+        existingLocal = linkedPlaylist.localPlaylistId
+          ? playlists.find((p) => p.id === linkedPlaylist.localPlaylistId)
+          : playlists.find((p) => p.spotifyId === playlistJobId);
+      }
+
+      if (existingLocal) {
+        const newIds = songIds.filter((id) => !existingLocal.songIds.includes(id));
+        for (const songId of newIds) {
+          await addSongToPlaylist(existingLocal.id, songId);
+        }
+        console.log(`[AutoPlaylist] Added ${newIds.length} new songs to existing local playlist: ${existingLocal.name}`);
+      } else {
+        const playlistName = linkedPlaylist.name || 'Spotify Playlist';
+        
+        // Mark as pending creation in cache
+        createdPlaylistsCache.set(playlistJobId, 'PENDING');
+
+        const newPlaylist = await createPlaylist(playlistName, linkedPlaylist.description || '');
+        
+        // Update cache with the actual ID
+        createdPlaylistsCache.set(playlistJobId, newPlaylist.id);
+
+        await updatePlaylist(newPlaylist.id, {
+          spotifyId: playlistJobId,
+          spotifyOwner: linkedPlaylist.owner,
+          spotifyDescription: linkedPlaylist.description,
+          lastSpotifySync: Date.now(),
+        });
+
+        for (const songId of songIds) {
+          await addSongToPlaylist(newPlaylist.id, songId);
+        }
+
+        if (window.electronAPI?.spotify) {
+          await window.electronAPI.spotify.updateLocalPlaylistId(playlistJobId, newPlaylist.id);
+        }
+        console.log(`[AutoPlaylist] Created new local playlist "${playlistName}" with ${songIds.length} songs`);
+      }
+    } catch (err) {
+      console.error('[AutoPlaylist] Error syncing playlist job locally:', err);
+    } finally {
+      activeSyncJobs.delete(playlistJobId);
+    }
+  };
+
+  // Listen to track completion and run the sync
+  window.electronAPI.downloader.onPlaylistTrackCompleted(async (data: { playlistJobId?: string }) => {
+    const { playlistJobId } = data;
+    if (!playlistJobId) return;
+    
+    // Delay slightly to let the queue store status update
+    setTimeout(() => {
+      syncPlaylistJobLocal(playlistJobId);
+    }, 1000);
+  });
+
+  // Listen to library scanner finished event to run any pending playlist creations
+  window.addEventListener('spotify:libraryScanCompleted', () => {
+    console.log('[AutoPlaylist] Library scan completed, checking for pending playlist jobs...');
+    const { queue } = useDownloaderStore.getState();
+    const jobIds = [...new Set(queue.map((i) => i.playlistJobId).filter(Boolean))] as string[];
+    
+    for (const jobId of jobIds) {
+      syncPlaylistJobLocal(jobId);
+    }
+  });
 }
+
+

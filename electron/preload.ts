@@ -106,6 +106,25 @@ export interface ElectronAPI {
     updateSettings: (settings: any) => Promise<any>;
     onQueueUpdated: (callback: (queue: any[]) => void) => () => void;
     onAutoImportFolder: (callback: (folder: string) => void) => () => void;
+    onPlaylistTrackCompleted: (callback: (data: any) => void) => () => void;
+  };
+  // Spotify Sync
+  spotify: {
+    search: (query: string, types?: string[]) => Promise<any>;
+    fetchPlaylistMeta: (url: string) => Promise<any>;
+    getLinkedPlaylists: () => Promise<any[]>;
+    addLinkedPlaylist: (url: string, options?: { autoSync?: boolean; syncInterval?: number }) => Promise<any>;
+    removeLinkedPlaylist: (spotifyId: string) => Promise<boolean>;
+    toggleAutoSync: (spotifyId: string, autoSync: boolean) => Promise<boolean>;
+    setSyncInterval: (spotifyId: string, interval: number) => Promise<boolean>;
+    syncPlaylist: (spotifyId: string, localSpotifyIds: string[], keepRemovedSongs: boolean) => Promise<any>;
+    cachePlaylistCover: (spotifyId: string, coverUrl: string) => Promise<string | null>;
+    updateLocalPlaylistId: (spotifyId: string, localPlaylistId: string) => Promise<boolean>;
+    getHistory: () => Promise<any[]>;
+    checkDuplicate: (spotifyId: string, isrc?: string, title?: string, artist?: string) => Promise<any>;
+    onLinkedPlaylistsUpdated: (callback: (playlists: any[]) => void) => () => void;
+    onSyncProgress: (callback: (progress: any) => void) => () => void;
+    onAutoSyncTrigger: (callback: (spotifyId: string) => void) => () => void;
   };
 }
 
@@ -186,6 +205,44 @@ const electronAPI: ElectronAPI = {
       const handler = (_event: unknown, folder: string) => callback(folder);
       ipcRenderer.on('scanner:autoImportFolder', handler);
       return () => ipcRenderer.removeListener('scanner:autoImportFolder', handler);
+    },
+    onPlaylistTrackCompleted: (callback) => {
+      const handler = (_event: unknown, data: any) => callback(data);
+      ipcRenderer.on('downloader:playlistTrackCompleted', handler);
+      return () => ipcRenderer.removeListener('downloader:playlistTrackCompleted', handler);
+    },
+  },
+  spotify: {
+    search: (query, types) => ipcRenderer.invoke('spotify:search', query, types),
+    fetchPlaylistMeta: (url) => ipcRenderer.invoke('spotify:fetchPlaylistMeta', url),
+    getLinkedPlaylists: () => ipcRenderer.invoke('spotify:getLinkedPlaylists'),
+    addLinkedPlaylist: (url, options) => ipcRenderer.invoke('spotify:addLinkedPlaylist', url, options),
+    removeLinkedPlaylist: (spotifyId) => ipcRenderer.invoke('spotify:removeLinkedPlaylist', spotifyId),
+    toggleAutoSync: (spotifyId, autoSync) => ipcRenderer.invoke('spotify:toggleAutoSync', spotifyId, autoSync),
+    setSyncInterval: (spotifyId, interval) => ipcRenderer.invoke('spotify:setSyncInterval', spotifyId, interval),
+    syncPlaylist: (spotifyId, localSpotifyIds, keepRemovedSongs) =>
+      ipcRenderer.invoke('spotify:syncPlaylist', spotifyId, localSpotifyIds, keepRemovedSongs),
+    cachePlaylistCover: (spotifyId, coverUrl) =>
+      ipcRenderer.invoke('spotify:cachePlaylistCover', spotifyId, coverUrl),
+    updateLocalPlaylistId: (spotifyId, localPlaylistId) =>
+      ipcRenderer.invoke('spotify:updateLocalPlaylistId', spotifyId, localPlaylistId),
+    getHistory: () => ipcRenderer.invoke('spotify:getHistory'),
+    checkDuplicate: (spotifyId, isrc, title, artist) =>
+      ipcRenderer.invoke('spotify:checkDuplicate', spotifyId, isrc, title, artist),
+    onLinkedPlaylistsUpdated: (callback) => {
+      const handler = (_event: unknown, playlists: any[]) => callback(playlists);
+      ipcRenderer.on('spotify:linkedPlaylistsUpdated', handler);
+      return () => ipcRenderer.removeListener('spotify:linkedPlaylistsUpdated', handler);
+    },
+    onSyncProgress: (callback) => {
+      const handler = (_event: unknown, progress: any) => callback(progress);
+      ipcRenderer.on('spotify:syncProgress', handler);
+      return () => ipcRenderer.removeListener('spotify:syncProgress', handler);
+    },
+    onAutoSyncTrigger: (callback) => {
+      const handler = (_event: unknown, spotifyId: string) => callback(spotifyId);
+      ipcRenderer.on('spotify:autoSyncTrigger', handler);
+      return () => ipcRenderer.removeListener('spotify:autoSyncTrigger', handler);
     },
   },
 };
