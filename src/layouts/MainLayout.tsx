@@ -2,6 +2,8 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Titlebar } from '@/components/Titlebar';
 import { Sidebar } from '@/components/Sidebar';
 import { MiniPlayer } from '@/components/MiniPlayer';
+import { MobileTopAppBar } from '@/components/MobileTopAppBar';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { usePlayerStore } from '@/stores';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
@@ -40,7 +42,7 @@ export function MainLayout() {
   }, [location.pathname]);
 
   return (
-    <div className="w-full h-full flex flex-col relative overflow-hidden">
+    <div className="w-full h-full flex flex-col relative overflow-hidden bg-[#09090b]">
       {/* Dynamic background overlay */}
       <motion.div
         className="absolute inset-0 pointer-events-none z-0"
@@ -50,12 +52,15 @@ export function MainLayout() {
         transition={{ duration: 0.7 }}
       />
 
-      {/* Titlebar */}
+      {/* Desktop Titlebar (Hidden on Mobile) */}
       <Titlebar />
+
+      {/* Mobile Top App Bar */}
+      <MobileTopAppBar />
 
       {/* Main content area */}
       <div className="flex flex-1 min-h-0 relative z-10">
-        {/* Sidebar */}
+        {/* Sidebar (Desktop Only) */}
         <Sidebar />
 
         {/* Content */}
@@ -79,7 +84,7 @@ export function MainLayout() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2, ease: 'easeOut' }}
-                className="p-6 pb-4"
+                className="p-4 pb-[150px] md:p-6 md:pb-4"
               >
                 <Outlet />
               </motion.div>
@@ -124,6 +129,9 @@ export function MainLayout() {
 
       {/* Mini Player */}
       <AnimatePresence>{currentSong && !showNowPlaying && <MiniPlayer />}</AnimatePresence>
+
+      {/* Mobile Native Bottom Navigation */}
+      <MobileBottomNav />
 
       {/* Now Playing Fullscreen Overlay */}
       <AnimatePresence>{showNowPlaying && <NowPlayingOverlay />}</AnimatePresence>

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { FavoritesData } from '@/types';
+import { platformService } from '@/platform';
 
 interface FavoritesState extends FavoritesData {
   isLoaded: boolean;
@@ -24,7 +25,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
 
   loadFavorites: async () => {
     try {
-      const data = (await window.electronAPI.data.read('favorites.json')) as FavoritesData | null;
+      const data = (await platformService.data.read('favorites.json')) as FavoritesData | null;
       if (data) {
         set({
           songIds: data.songIds || [],
@@ -46,7 +47,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
     const newSongIds = isFav ? songIds.filter((id) => id !== songId) : [...songIds, songId];
 
     set({ songIds: newSongIds });
-    await window.electronAPI.data.write('favorites.json', {
+    await platformService.data.write('favorites.json', {
       songIds: newSongIds,
       albumIds,
       artistIds,
@@ -64,7 +65,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
     const newAlbumIds = isFav ? albumIds.filter((id) => id !== albumId) : [...albumIds, albumId];
 
     set({ albumIds: newAlbumIds });
-    await window.electronAPI.data.write('favorites.json', {
+    await platformService.data.write('favorites.json', {
       songIds,
       albumIds: newAlbumIds,
       artistIds,
@@ -84,7 +85,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
       : [...artistIds, artistId];
 
     set({ artistIds: newArtistIds });
-    await window.electronAPI.data.write('favorites.json', {
+    await platformService.data.write('favorites.json', {
       songIds,
       albumIds,
       artistIds: newArtistIds,

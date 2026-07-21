@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Minus, Square, X, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { platformService } from '@/platform';
 
 export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
+    if (!platformService.isElectron || !window.electronAPI?.window) return;
+
     const checkMaximized = async () => {
       const maximized = await window.electronAPI.window.isMaximized();
       setIsMaximized(maximized);
@@ -16,8 +19,13 @@ export function Titlebar() {
     return () => clearInterval(interval);
   }, []);
 
+  // Completely hide titlebar on Android / Non-Electron environments
+  if (!platformService.isElectron || !window.electronAPI?.window) {
+    return null;
+  }
+
   return (
-    <div className="drag-region h-9 flex items-center justify-between px-4 bg-transparent z-50 relative shrink-0">
+    <div className="drag-region h-9 hidden md:flex items-center justify-between px-4 bg-transparent z-50 relative shrink-0">
       {/* App title */}
       <div className="flex items-center gap-2 no-drag">
         <img src="logo.png" className="w-4 h-4 object-contain" alt="" />

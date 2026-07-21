@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { HistoryEntry } from '@/types';
+import { platformService } from '@/platform';
 
 interface HistoryState {
   entries: HistoryEntry[];
@@ -16,7 +17,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   loadHistory: async () => {
     try {
-      const data = (await window.electronAPI.data.read('history.json')) as {
+      const data = (await platformService.data.read('history.json')) as {
         entries: HistoryEntry[];
       } | null;
       if (data && Array.isArray(data.entries)) {
@@ -52,7 +53,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     const updatedEntries = [newEntry, ...entries].slice(0, 1000);
 
     set({ entries: updatedEntries });
-    await window.electronAPI.data.write('history.json', { entries: updatedEntries });
+    await platformService.data.write('history.json', { entries: updatedEntries });
 
     // Also update play count in the library store and write back to library.json
     try {
@@ -68,7 +69,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       useLibraryStore.setState({ songs: updatedSongs });
 
       // Save to library.json
-      await window.electronAPI.data.write('library.json', {
+      await platformService.data.write('library.json', {
         songs: updatedSongs,
         albums,
         artists,
@@ -81,14 +82,14 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   clearHistory: async () => {
     set({ entries: [] });
-    await window.electronAPI.data.write('history.json', { entries: [] });
+    await platformService.data.write('history.json', { entries: [] });
   },
 
   removeFromHistory: async (songId: string) => {
     const { entries } = get();
     const updatedEntries = entries.filter((e) => e.songId !== songId);
     set({ entries: updatedEntries });
-    await window.electronAPI.data.write('history.json', { entries: updatedEntries });
+    await platformService.data.write('history.json', { entries: updatedEntries });
   },
 }));
 

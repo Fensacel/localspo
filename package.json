@@ -16,6 +16,11 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/preferences": "^8.0.1",
     "@tanstack/react-virtual": "^3.13.6",
     "chokidar": "^4.0.3",
     "color-thief-browser": "^2.0.2",
@@ -71,25 +76,27 @@
         ]
       }
     ],
-  "publish": [
-    {
-      "provider": "github",
-      "owner": "Fensacel",
-      "repo": "localspo"
-    }
-  ],
-  "win": {
-    "target": [
+    "publish": [
       {
-        "target": "nsis",
-        "arch": ["x64"]
+        "provider": "github",
+        "owner": "Fensacel",
+        "repo": "localspo"
       }
     ],
-    "icon": "public/logo.png"
-  },
-  "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
-}
 }

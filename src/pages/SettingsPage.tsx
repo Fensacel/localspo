@@ -197,16 +197,6 @@ export function SettingsPage() {
                   <motion.button
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
-                    onClick={() => {
-                      window.dispatchEvent(new CustomEvent('test:showUpdateModal', { detail: { status: 'downloaded', version: '1.0.5' } }));
-                    }}
-                    className="px-3 py-2 bg-white/5 hover:bg-white/10 text-xs font-semibold text-text/70 hover:text-text rounded-xl border border-white/10 transition-colors"
-                  >
-                    Preview Update Popup
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
                     disabled={updateStatus?.status === 'checking' || updateStatus?.status === 'downloading'}
                     onClick={() => {
                       setUpdateStatus({ status: 'checking' });

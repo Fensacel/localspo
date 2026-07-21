@@ -51,6 +51,47 @@ export function AudioEngine() {
     };
   }, []);
 
+  // Sync MediaSession for Android & Desktop media notification / lockscreen controls
+  useEffect(() => {
+    if ('mediaSession' in navigator && currentSong) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentSong.title,
+        artist: currentSong.artist,
+        album: currentSong.album || '',
+        artwork: currentSong.coverPath
+          ? [{ src: getAudioUrl(currentSong.coverPath), sizes: '512x512', type: 'image/png' }]
+          : [],
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => {
+        setIsPlaying(true);
+        window.dispatchEvent(new CustomEvent('player:toggle'));
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        setIsPlaying(false);
+        window.dispatchEvent(new CustomEvent('player:toggle'));
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        usePlayerStore.getState().playPrevious();
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        usePlayerStore.getState().playNext();
+      });
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined) {
+          usePlayerStore.getState().setCurrentTime(details.seekTime);
+          window.dispatchEvent(new CustomEvent('player:seek', { detail: details.seekTime }));
+        }
+      });
+    }
+  }, [currentSong, setIsPlaying]);
+
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying]);
+
   // Initialize Web Audio API
   const initAudioContext = useCallback(() => {
     if (audioContextRef.current || !audioRef.current) {

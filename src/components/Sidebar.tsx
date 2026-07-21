@@ -48,7 +48,7 @@ export function Sidebar() {
       initial={{ x: -20, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="w-[260px] h-full glass-heavy flex flex-col shrink-0 z-40"
+      className="w-[260px] h-full glass-heavy hidden md:flex flex-col shrink-0 z-40"
     >
       {/* Search */}
       <div className="px-4 pt-2 pb-3">

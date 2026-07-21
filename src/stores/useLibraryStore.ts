@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Song, Album, Artist, LibraryData, ScanProgress } from '@/types';
+import { platformService } from '@/platform';
 
 interface LibraryState {
   songs: Song[];
@@ -118,9 +119,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   updateSongTags: async (songId, payload) => {
-    if (window.electronAPI?.scanner?.updateTags) {
+    if (platformService.scanner?.updateTags) {
       try {
-        const res: any = await window.electronAPI.scanner.updateTags({
+        const res: any = await platformService.scanner.updateTags({
           songId,
           filePath: payload.path,
           title: payload.title,
@@ -134,7 +135,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         });
 
         if (res?.success) {
-          const freshData: any = res.library || (await window.electronAPI.scanner.getLibrary());
+          const freshData: any = res.library || (await platformService.scanner.getLibrary());
           if (freshData) {
             get().setLibraryData(freshData);
           }

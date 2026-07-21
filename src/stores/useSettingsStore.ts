@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Settings } from '@/types';
+import { platformService } from '@/platform';
 
 interface SettingsState extends Settings {
   isLoaded: boolean;
@@ -33,7 +34,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadSettings: async () => {
     try {
-      const data = (await window.electronAPI.data.read('settings.json')) as Settings | null;
+      const data = (await platformService.data.read('settings.json')) as Settings | null;
       if (data) {
         set({ ...defaultSettings, ...data, isLoaded: true });
       } else {
@@ -48,7 +49,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const current = get();
     const updated = { ...current, ...partial };
     set(partial);
-    await window.electronAPI.data.write('settings.json', {
+    await platformService.data.write('settings.json', {
       musicFolders: updated.musicFolders,
       theme: updated.theme,
       accentColor: updated.accentColor,

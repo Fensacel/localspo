@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Playlist } from '@/types';
+import { platformService } from '@/platform';
 
 interface PlaylistState {
   playlists: Playlist[];
@@ -23,7 +24,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
   loadPlaylists: async () => {
     try {
-      const data = (await window.electronAPI.data.read('playlist.json')) as {
+      const data = (await platformService.data.read('playlist.json')) as {
         playlists: Playlist[];
       } | null;
       if (data && Array.isArray(data.playlists)) {
@@ -52,7 +53,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
     const updatedPlaylists = [...playlists, newPlaylist];
     set({ playlists: updatedPlaylists });
-    await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+    await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
     return newPlaylist;
   },
 
@@ -60,7 +61,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     const { playlists } = get();
     const updatedPlaylists = playlists.filter((p) => p.id !== id);
     set({ playlists: updatedPlaylists });
-    await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+    await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
   },
 
   updatePlaylist: async (id, partial) => {
@@ -77,7 +78,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     });
 
     set({ playlists: updatedPlaylists });
-    await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+    await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
   },
 
   addSongToPlaylist: async (playlistId, songId) => {
@@ -112,7 +113,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       });
 
       set({ playlists: updatedPlaylists });
-      await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+      await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
 
       const targetPlaylist = playlists.find((p) => p.id === playlistId);
       if (targetPlaylist) {
@@ -158,7 +159,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       });
 
       set({ playlists: updatedPlaylists });
-      await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+      await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
 
       const targetPlaylist = playlists.find((p) => p.id === playlistId);
       if (targetPlaylist) {
@@ -184,7 +185,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     });
 
     set({ playlists: updatedPlaylists });
-    await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+    await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
   },
 
   toggleFavoritePlaylist: async (id) => {
@@ -201,7 +202,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     });
 
     set({ playlists: updatedPlaylists });
-    await window.electronAPI.data.write('playlist.json', { playlists: updatedPlaylists });
+    await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
   },
 }));
 

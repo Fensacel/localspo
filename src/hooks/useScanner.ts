@@ -1,9 +1,10 @@
 import { useEffect, useCallback } from 'react';
 import { useLibraryStore, useSettingsStore } from '@/stores';
 import type { LibraryData, ScanProgress } from '@/types';
+import { platformService } from '@/platform';
 
 /**
- * Hook that manages the music scanner bridge between Electron main and renderer.
+ * Hook that manages the music scanner bridge between Electron main / Capacitor Android and renderer.
  * Listens for scan events, loads library on mount, and handles folder scanning.
  */
 export function useScanner() {
@@ -15,7 +16,7 @@ export function useScanner() {
     const loadLibrary = async () => {
       setLoading(true);
       try {
-        const data = (await window.electronAPI.scanner.getLibrary()) as LibraryData | null;
+        const data = (await platformService.scanner.getLibrary()) as LibraryData | null;
         if (data) {
           setLibraryData(data);
         }
@@ -31,13 +32,13 @@ export function useScanner() {
 
   // Listen for scan progress
   useEffect(() => {
-    const unsubscribe = window.electronAPI.scanner.onProgress((data: unknown) => {
+    const unsubscribe = platformService.scanner.onProgress((data: unknown) => {
       const progress = data as ScanProgress;
       setScanProgress(progress);
 
       // When scan is done, reload library
       if (progress.status === 'done') {
-        window.electronAPI.scanner.getLibrary().then((libData: unknown) => {
+        platformService.scanner.getLibrary().then((libData: unknown) => {
           if (libData) {
             setLibraryData(libData as LibraryData);
           }
@@ -55,12 +56,12 @@ export function useScanner() {
       if (!folder) return;
 
       await addMusicFolder(folder);
-      await window.electronAPI.scanner.scan(folder);
+      await platformService.scanner.scanFolder(folder);
     };
 
     const handleRescan = async () => {
       for (const folder of musicFolders) {
-        await window.electronAPI.scanner.scan(folder);
+        await platformService.scanner.scanFolder(folder);
       }
     };
 
@@ -76,7 +77,7 @@ export function useScanner() {
   const scanFolder = useCallback(
     async (folder: string) => {
       await addMusicFolder(folder);
-      return window.electronAPI.scanner.scan(folder);
+      return platformService.scanner.scanFolder(folder);
     },
     [addMusicFolder],
   );
