@@ -1,4 +1,4 @@
-# 🎵 BlueTune (LocalSpo)
+# 🎵 LocalSpo
 
 > **A Next-Gen, Premium Desktop Local Music Player** built with Electron, React, TypeScript, and Tailwind CSS. Designed for audiophiles and music lovers who appreciate sleek aesthetics and powerful features.
 
@@ -16,7 +16,7 @@ You can download the latest installer `.exe` for Windows directly from the GitHu
 
 1. Go to the [**Releases Page**](https://github.com/Fensacel/localspo/releases/latest).
 2. Download `LocalSpo Setup X.X.X.exe` under **Assets**.
-3. Run the installer to install BlueTune on your Windows PC.
+3. Run the installer to install LocalSpo on your Windows PC.
 4. Enjoy your music with automatic lyrics, romanization, and built-in auto-updater!
 
 ---
@@ -36,6 +36,17 @@ You can download the latest installer `.exe` for Windows directly from the GitHu
   - Recap stats for Most Played tracks (Today, This Week, This Month).
 - **🎨 Glassmorphism & Modern UI**: Animated album artwork, dynamic color palettes, full-screen Now Playing mode, and smooth Framer Motion animations.
 - **🔄 Auto-Updater**: Built-in `electron-updater` integration with background download and 1-click restart-to-update support.
+
+---
+
+## 📷 Screenshot
+<img width="1912" height="1128" alt="image" src="https://github.com/user-attachments/assets/23264bfd-8ac2-4519-98ad-3621d773af7f" />
+<img width="1910" height="1127" alt="image" src="https://github.com/user-attachments/assets/a1c7db6d-bb0f-4fe8-a28f-69119e20a38d" />
+<img width="1915" height="1130" alt="image" src="https://github.com/user-attachments/assets/0730be37-af44-4e8f-9a50-42edb2e6e842" />
+<img width="1913" height="1121" alt="image" src="https://github.com/user-attachments/assets/cefe6b4b-1858-4a4b-8974-4c072b88d783" />
+<img width="1913" height="1129" alt="image" src="https://github.com/user-attachments/assets/8ea81f0b-109a-459e-ab38-911615906d50" />
+
+
 
 ---
 
