@@ -1,4 +1,4 @@
-<img width="1915" height="1130" alt="image" src="https://github.com/user-attachments/assets/fe4df50e-72c1-4970-90a6-3b881aaf52c8" /># 🎵 BlueTune (LocalSpo)
+# 🎵 BlueTune (LocalSpo)
 
 > **A Next-Gen, Premium Desktop Local Music Player** built with Electron, React, TypeScript, and Tailwind CSS. Designed for audiophiles and music lovers who appreciate sleek aesthetics and powerful features.
 
@@ -40,7 +40,7 @@ You can download the latest installer `.exe` for Windows directly from the GitHu
 ---
 
 ## 📷 Screenshot
-<img width="1918" height="1128" alt="image" src="https://github.com/user-attachments/assets/14a7223e-c1ab-4b46-ae15-8dc8121658c0" />
+<img width="1912" height="1128" alt="image" src="https://github.com/user-attachments/assets/23264bfd-8ac2-4519-98ad-3621d773af7f" />
 <img width="1910" height="1127" alt="image" src="https://github.com/user-attachments/assets/a1c7db6d-bb0f-4fe8-a28f-69119e20a38d" />
 <img width="1915" height="1130" alt="image" src="https://github.com/user-attachments/assets/0730be37-af44-4e8f-9a50-42edb2e6e842" />
 <img width="1913" height="1121" alt="image" src="https://github.com/user-attachments/assets/cefe6b4b-1858-4a4b-8974-4c072b88d783" />
