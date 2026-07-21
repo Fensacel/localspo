@@ -90,7 +90,7 @@ export function HistoryTab() {
             >
               {/* Cover */}
               {item.coverUrl ? (
-                <img src={item.coverUrl} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                <img src={item.coverUrl} alt="" referrerPolicy="no-referrer" className="w-9 h-9 rounded-lg object-cover shrink-0" />
               ) : (
                 <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
                   <Music size={13} className="text-text/30" />

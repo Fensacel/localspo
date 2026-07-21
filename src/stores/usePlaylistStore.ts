@@ -13,6 +13,7 @@ interface PlaylistState {
     partial: Partial<Omit<Playlist, 'id' | 'createdAt'>>,
   ) => Promise<void>;
   addSongToPlaylist: (playlistId: string, songId: string) => Promise<void>;
+  addSongsToPlaylist: (playlistId: string, songIds: string[]) => Promise<void>;
   removeSongFromPlaylist: (playlistId: string, songId: string) => Promise<void>;
   togglePinPlaylist: (id: string) => Promise<void>;
   toggleFavoritePlaylist: (id: string) => Promise<void>;
@@ -82,20 +83,25 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   },
 
   addSongToPlaylist: async (playlistId, songId) => {
+    return get().addSongsToPlaylist(playlistId, [songId]);
+  },
+
+  addSongsToPlaylist: async (playlistId, newSongIds) => {
     try {
       const { playlists } = get();
       const updatedPlaylists = playlists.map((p) => {
         if (p.id === playlistId) {
-          // Prevent duplicate songs in playlist
-          const songIds = p.songIds.includes(songId) ? p.songIds : [...p.songIds, songId];
+          const uniqueNewIds = newSongIds.filter((id) => !p.songIds.includes(id));
+          if (uniqueNewIds.length === 0) return p;
 
-          // If playlist doesn't have a cover, use the cover of the added song
+          const songIds = [...p.songIds, ...uniqueNewIds];
+
           let coverPath = p.coverPath;
-          if (!coverPath) {
+          if (!coverPath && songIds.length > 0) {
             try {
-              const song = useLibraryStore.getState().getSongById(songId);
-              if (song && song.coverPath) {
-                coverPath = song.coverPath;
+              const firstSong = useLibraryStore.getState().getSongById(songIds[0]);
+              if (firstSong && firstSong.coverPath) {
+                coverPath = firstSong.coverPath;
               }
             } catch (coverErr) {
               console.warn('Library store cover retrieval failed:', coverErr);
@@ -116,11 +122,13 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
 
       const targetPlaylist = playlists.find((p) => p.id === playlistId);
-      if (targetPlaylist) {
+      if (targetPlaylist && newSongIds.length === 1) {
         useToastStore.getState().showToast(`Added to ${targetPlaylist.name}`);
+      } else if (targetPlaylist && newSongIds.length > 1) {
+        useToastStore.getState().showToast(`Added ${newSongIds.length} songs to ${targetPlaylist.name}`);
       }
     } catch (err) {
-      console.error('Error in addSongToPlaylist:', err);
+      console.error('Error in addSongsToPlaylist:', err);
       useToastStore.getState().showToast(`Failed: ${(err as Error).message}`, 'error');
     }
   },

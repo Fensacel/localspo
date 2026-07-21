@@ -186,7 +186,6 @@ if (typeof window !== 'undefined' && window.electronAPI?.downloader) {
 
       const linkedPlaylists = useSpotifyStore.getState().linkedPlaylists;
       const linkedPlaylist = linkedPlaylists.find((p) => p.spotifyId === playlistJobId);
-      if (!linkedPlaylist) return;
 
       const completedTracks = jobTracks.filter((i) => i.status === 'completed' && i.outputPath);
       if (completedTracks.length === 0) return;
@@ -209,7 +208,7 @@ if (typeof window !== 'undefined' && window.electronAPI?.downloader) {
         return;
       }
 
-      const { playlists, createPlaylist, addSongToPlaylist, updatePlaylist } = usePlaylistStore.getState();
+      const { playlists, createPlaylist, addSongsToPlaylist, updatePlaylist } = usePlaylistStore.getState();
 
       const cachedLocalId = createdPlaylistsCache.get(playlistJobId);
       let existingLocal = cachedLocalId && cachedLocalId !== 'PENDING'
@@ -217,38 +216,33 @@ if (typeof window !== 'undefined' && window.electronAPI?.downloader) {
         : null;
 
       if (!existingLocal) {
-        existingLocal = linkedPlaylist.localPlaylistId
+        existingLocal = (linkedPlaylist?.localPlaylistId
           ? playlists.find((p) => p.id === linkedPlaylist.localPlaylistId)
-          : playlists.find((p) => p.spotifyId === playlistJobId);
+          : null) || playlists.find((p) => p.spotifyId === playlistJobId);
       }
 
       if (existingLocal) {
-        const newIds = songIds.filter((id) => !existingLocal.songIds.includes(id));
-        for (const songId of newIds) {
-          await addSongToPlaylist(existingLocal.id, songId);
-        }
-        console.log(`[AutoPlaylist] Added ${newIds.length} new songs to existing local playlist: ${existingLocal.name}`);
+        await addSongsToPlaylist(existingLocal.id, songIds);
+        console.log(`[AutoPlaylist] Added songs to existing local playlist: ${existingLocal.name}`);
       } else {
-        const playlistName = linkedPlaylist.name || 'Spotify Playlist';
+        const playlistName = linkedPlaylist?.name || jobTracks[0]?.album || 'Spotify Playlist';
         
         // Mark as pending creation in cache
         createdPlaylistsCache.set(playlistJobId, 'PENDING');
 
-        const newPlaylist = await createPlaylist(playlistName, linkedPlaylist.description || '');
+        const newPlaylist = await createPlaylist(playlistName, linkedPlaylist?.description || '');
         
         // Update cache with the actual ID
         createdPlaylistsCache.set(playlistJobId, newPlaylist.id);
 
         await updatePlaylist(newPlaylist.id, {
           spotifyId: playlistJobId,
-          spotifyOwner: linkedPlaylist.owner,
-          spotifyDescription: linkedPlaylist.description,
+          spotifyOwner: linkedPlaylist?.owner || '',
+          spotifyDescription: linkedPlaylist?.description || '',
           lastSpotifySync: Date.now(),
         });
 
-        for (const songId of songIds) {
-          await addSongToPlaylist(newPlaylist.id, songId);
-        }
+        await addSongsToPlaylist(newPlaylist.id, songIds);
 
         if (window.electronAPI?.spotify) {
           await window.electronAPI.spotify.updateLocalPlaylistId(playlistJobId, newPlaylist.id);

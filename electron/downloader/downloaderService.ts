@@ -10,6 +10,7 @@ import { YTMusicApi } from './ytMusicApi';
 import { LyricsApi } from './lyricsApi';
 import { AudioTagger } from './tagger';
 import { getBinaryPaths } from './binaryManager';
+import { fetchHighResCoverUrl, enrichTrackMetadata } from './metadataCleaner';
 
 async function downloadImageBuffer(urlStr: string): Promise<Buffer | null> {
   return new Promise((resolve) => {
@@ -132,13 +133,13 @@ export class DownloaderService {
       meta = await SpotifyApiExtractor.fetchMetadata(urlStr);
     }
     const addedItems: DownloadItem[] = [];
+    const effectiveJobId =
+      playlistJobId || (meta.type === 'playlist' || meta.type === 'album' ? meta.id : undefined);
 
     for (const track of meta.tracks) {
-      // Check if already in queue and completed/downloading
-      const existing = this.queue.find(
-        (item) => item.spotifyId === track.id && item.status !== 'failed' && item.status !== 'cancelled',
-      );
-      if (existing) {
+      // Check if track is already queued or already downloaded on disk
+      if (this.isTrackDownloaded(track.id, track.isrc, track.title, track.artist)) {
+        console.log(`[Downloader] Skipping "${track.artist} - ${track.title}" (already downloaded or queued)`);
         continue;
       }
 
@@ -156,7 +157,7 @@ export class DownloaderService {
         eta: '--:--',
         addedAt: Date.now(),
         attempts: 0,
-        playlistJobId,
+        playlistJobId: effectiveJobId,
 
         releaseDate: track.releaseDate,
         trackNumber: track.trackNumber,
@@ -181,6 +182,63 @@ export class DownloaderService {
   }
 
   /**
+   * Check if a track already exists on disk (in queue, history, or download folder).
+   */
+  public isTrackDownloaded(
+    spotifyId: string,
+    isrc?: string,
+    title?: string,
+    artist?: string,
+  ): boolean {
+    // 1. Check active/queued list
+    const inQueue = this.queue.find(
+      (item) =>
+        (item.spotifyId === spotifyId || (isrc && item.isrc && item.isrc === isrc)) &&
+        (item.status === 'completed' || item.status === 'downloading' || item.status === 'tagging' || item.status === 'queued'),
+    );
+    if (inQueue) {
+      if (inQueue.status === 'completed') {
+        if (inQueue.outputPath && fs.existsSync(inQueue.outputPath)) {
+          return true;
+        }
+      } else {
+        return true; // Already queued/downloading
+      }
+    }
+
+    // 2. Check history file
+    const historyPath = path.join(this.getDataPath(), 'downloader_history.json');
+    if (fs.existsSync(historyPath)) {
+      try {
+        const history: any[] = JSON.parse(fs.readFileSync(historyPath, 'utf-8'));
+        const historyMatch = history.find(
+          (entry) =>
+            (entry.spotifyId === spotifyId || (isrc && entry.isrc && entry.isrc === isrc)) &&
+            entry.status === 'completed' &&
+            entry.outputPath &&
+            fs.existsSync(entry.outputPath),
+        );
+        if (historyMatch) return true;
+      } catch {}
+    }
+
+    // 3. Check download directory for matching filename (Artist - Title.ext)
+    if (title && artist && this.settings.downloadFolder && fs.existsSync(this.settings.downloadFolder)) {
+      const sanitizedArtist = artist.replace(/[\\/:*?"<>|]/g, '_').trim();
+      const sanitizedTitle = title.replace(/[\\/:*?"<>|]/g, '_').trim();
+      const formats = ['mp3', 'flac', 'm4a', 'wav'];
+      for (const fmt of formats) {
+        const expectedFile = path.join(this.settings.downloadFolder, `${sanitizedArtist} - ${sanitizedTitle}.${fmt}`);
+        if (fs.existsSync(expectedFile)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Check if a track already exists in the library by spotifyId, ISRC, or title+artist.
    * Used for smart duplicate detection before queuing a download.
    */
@@ -190,15 +248,8 @@ export class DownloaderService {
     title?: string,
     artist?: string,
   ): { exists: boolean; localPath?: string } {
-    // Check if already in queue as completed
-    const inQueue = this.queue.find(
-      (item) =>
-        (item.spotifyId === spotifyId || (isrc && item.isrc === isrc)) && item.status === 'completed',
-    );
-    if (inQueue) {
-      return { exists: true, localPath: inQueue.outputPath };
-    }
-    return { exists: false };
+    const exists = this.isTrackDownloaded(spotifyId, isrc, title, artist);
+    return { exists };
   }
 
   public cancelDownload(id: string): void {
@@ -402,7 +453,13 @@ export class DownloaderService {
       item.progress = 80;
       this.broadcastStatus();
 
-      // Download official Spotify Cover image inside OS temp directory
+      // Enrich metadata (auto-lookup missing album name and 1:1 high-res square cover)
+      const enriched = await enrichTrackMetadata(item.artist, item.title, item.album, item.coverUrl);
+      item.artist = enriched.artist;
+      item.title = enriched.title;
+      if (enriched.album) item.album = enriched.album;
+      if (enriched.coverUrl) item.coverUrl = enriched.coverUrl;
+
       let localCoverPath: string | null = null;
       if (item.coverUrl) {
         const coverBuffer = await downloadImageBuffer(item.coverUrl);

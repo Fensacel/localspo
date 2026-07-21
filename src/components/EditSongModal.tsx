@@ -57,10 +57,16 @@ export function EditSongModal({ song, isOpen, onClose }: EditSongModalProps) {
 
   useEffect(() => {
     if (song && isOpen) {
-      setTitle(song.title || '');
-      setArtist(song.artist || '');
-      setAlbum(song.album || '');
-      setAlbumArtist(song.albumArtist || song.artist || '');
+      const cleanArtist = (song.artist || '').replace(/\s*-\s*Topic$/i, '').replace(/\s+VEVO$/i, '').trim();
+      const cleanTitle = (song.title || '').replace(/\s*[\(\[]\s*(?:Official\s+)?(?:Music\s+)?(?:Video|Audio|Lyric\s+Video|M\/V|MV)\s*[\)\]]/gi, '').trim();
+      const rawAlbum = song.album || '';
+      const cleanAlbum = (!rawAlbum || /^YouTube/i.test(rawAlbum.trim()) || rawAlbum.trim() === 'Unknown Album' || rawAlbum.trim() === cleanTitle) ? '' : rawAlbum.trim();
+      const cleanAlbumArtist = (song.albumArtist || song.artist || '').replace(/\s*-\s*Topic$/i, '').replace(/\s+VEVO$/i, '').trim();
+
+      setTitle(cleanTitle);
+      setArtist(cleanArtist);
+      setAlbum(cleanAlbum);
+      setAlbumArtist(cleanAlbumArtist);
       setYear(song.year || '');
       setGenre(song.genre || '');
       setCoverPath(song.coverPath || null);

@@ -5,6 +5,8 @@ import * as crypto from 'crypto';
 import { getBinaryPaths } from './downloader/binaryManager';
 import { AudioTagger } from './downloader/tagger';
 
+import { cleanMusicMetadata } from './downloader/metadataCleaner';
+
 const SUPPORTED_EXTENSIONS = new Set([
   '.flac', '.mp3', '.aac', '.alac', '.wav', '.aiff', '.ogg', '.m4a',
 ]);
@@ -221,11 +223,23 @@ async function readMetadata(filePath: string, cachePath: string): Promise<RawMet
 
     const commentVal = common.comment?.[0] || (typeof common.comments === 'string' ? common.comments : (common.comments as any)?.[0]?.text) || '';
 
+    const rawTitle = common.title || path.basename(filePath, path.extname(filePath));
+    const rawArtist = common.artist || common.albumartist || 'Unknown Artist';
+    const rawAlbum = common.album || '';
+    const rawAlbumArtist = common.albumartist || common.artist || 'Unknown Artist';
+
+    const cleaned = cleanMusicMetadata({
+      title: rawTitle,
+      artist: rawArtist,
+      album: rawAlbum,
+      albumArtist: rawAlbumArtist,
+    });
+
     return {
-      title: common.title || path.basename(filePath, path.extname(filePath)),
-      artist: common.artist || common.albumartist || 'Unknown Artist',
-      album: common.album || 'Unknown Album',
-      albumArtist: common.albumartist || common.artist || 'Unknown Artist',
+      title: cleaned.title,
+      artist: cleaned.artist,
+      album: cleaned.album,
+      albumArtist: cleaned.albumArtist,
       genre: common.genre?.[0] || '',
       disc: common.disk?.no || 1,
       track: common.track?.no || 0,

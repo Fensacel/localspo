@@ -28,6 +28,8 @@ export interface TagData {
   remixer?: string;
 }
 
+import { cleanMusicMetadata } from './metadataCleaner';
+
 export class AudioTagger {
   public static async embedTags(
     filePath: string,
@@ -35,6 +37,19 @@ export class AudioTagger {
     tags: TagData
   ): Promise<boolean> {
     if (!fs.existsSync(filePath)) return false;
+
+    // Clean tags before embedding
+    const cleaned = cleanMusicMetadata({
+      title: tags.title || '',
+      artist: tags.artist || '',
+      album: tags.album || '',
+    });
+    tags = {
+      ...tags,
+      title: cleaned.title,
+      artist: cleaned.artist,
+      album: cleaned.album,
+    };
 
     const dir = path.dirname(filePath);
     const ext = path.extname(filePath);

@@ -1,4 +1,4 @@
-import { useRef, FormEvent } from 'react';
+import { useState, useRef, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -300,6 +300,8 @@ function TrackRow({
   onDownload,
   downloadLabel,
 }: TrackRowProps) {
+  const [hasError, setHasError] = useState(false);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -311,8 +313,14 @@ function TrackRow({
       <div
         className={`w-14 h-14 shrink-0 bg-white/5 overflow-hidden ${coverRound ? 'rounded-full' : 'rounded-md'}`}
       >
-        {cover ? (
-          <img src={cover} alt="" className="w-full h-full object-cover" />
+        {cover && !hasError ? (
+          <img
+            src={cover}
+            alt=""
+            referrerPolicy="no-referrer"
+            onError={() => setHasError(true)}
+            className="w-full h-full object-cover"
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Music size={18} className="text-white/20" />

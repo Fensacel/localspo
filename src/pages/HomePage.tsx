@@ -257,7 +257,7 @@ function HeroSection({ song }: { song: Song }) {
           </p>
           <h1 className="text-xl font-bold text-text mb-1 truncate max-w-xs">{song.title}</h1>
           <p className="text-sm text-text/50">
-            {song.artist} — {song.album}
+            {song.artist}{song.album && song.album !== song.title ? ` — ${song.album}` : ''}
           </p>
         </div>
       </div>
@@ -293,6 +293,8 @@ function PlaylistCard({ playlist, onPlay, onClick }: PlaylistCardProps) {
   const coverSrc = playlist.coverPath
     ? `local-image://${encodeURIComponent(playlist.coverPath)}`
     : null;
+  const { getSongById } = useLibraryStore();
+  const validSongCount = playlist.songIds.filter((sid) => !!getSongById(sid)).length;
 
   return (
     <motion.div
@@ -333,7 +335,7 @@ function PlaylistCard({ playlist, onPlay, onClick }: PlaylistCardProps) {
       </div>
       <p className="text-sm font-semibold truncate">{playlist.name}</p>
       <p className="text-xs text-text/35 mt-0.5">
-        {playlist.songIds.length} song{playlist.songIds.length !== 1 ? 's' : ''}
+        {validSongCount} song{validSongCount !== 1 ? 's' : ''}
       </p>
     </motion.div>
   );

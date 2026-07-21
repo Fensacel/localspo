@@ -1,4 +1,4 @@
-import { usePlaylistStore } from '@/stores';
+import { usePlaylistStore, useLibraryStore } from '@/stores';
 import { ListMusic, Plus, Pin, Heart, Trash2, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 export function PlaylistsPage() {
   const { playlists, createPlaylist, deletePlaylist, togglePinPlaylist, toggleFavoritePlaylist } =
     usePlaylistStore();
+  const { getSongById } = useLibraryStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [playlistToDelete, setPlaylistToDelete] = useState<string | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -74,6 +75,7 @@ export function PlaylistsPage() {
             const coverSrc = playlist.coverPath
               ? `local-image://${encodeURIComponent(playlist.coverPath)}`
               : null;
+            const validSongCount = playlist.songIds.filter((sid) => !!getSongById(sid)).length;
 
             return (
               <motion.div
@@ -133,7 +135,7 @@ export function PlaylistsPage() {
 
                   {/* Songs counter indicator */}
                   <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md glass text-[10px] font-mono tracking-wide text-text/70">
-                    {playlist.songIds.length} song{playlist.songIds.length !== 1 ? 's' : ''}
+                    {validSongCount} song{validSongCount !== 1 ? 's' : ''}
                   </div>
                 </div>
 

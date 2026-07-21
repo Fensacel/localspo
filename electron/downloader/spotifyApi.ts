@@ -1,3 +1,5 @@
+import { YTMusicApi } from './ytMusicApi';
+
 export interface SpotifyTrackMeta {
   id: string;
   spotifyUrl: string;
@@ -725,59 +727,86 @@ export class SpotifyApiExtractor {
     artists: any[];
     playlists: any[];
   }> {
-    const token = await this.getAnonymousAccessToken();
-    if (!token) throw new Error('Could not obtain Spotify access token');
+    try {
+      const token = await this.getAnonymousAccessToken();
+      if (token) {
+        const typeStr = types.join(',');
+        const encodedQuery = encodeURIComponent(query);
+        const url = `https://api.spotify.com/v1/search?q=${encodedQuery}&type=${typeStr}&limit=${limit}`;
 
-    const typeStr = types.join(',');
-    const encodedQuery = encodeURIComponent(query);
-    const url = `https://api.spotify.com/v1/search?q=${encodedQuery}&type=${typeStr}&limit=${limit}`;
+        const res = await this.httpGetJson(url, {
+          Authorization: `Bearer ${token}`,
+        });
 
-    const res = await this.httpGetJson(url, {
-      Authorization: `Bearer ${token}`,
-    });
+        if (res && (res.tracks?.items?.length || res.albums?.items?.length || res.artists?.items?.length || res.playlists?.items?.length)) {
+          const tracks = (res.tracks?.items || []).filter(Boolean).map((t: any) => ({
+            id: t.id,
+            title: t.name,
+            artist: t.artists?.map((a: any) => a.name).join(', ') || 'Unknown Artist',
+            artistNames: t.artists?.map((a: any) => a.name) || [],
+            album: t.album?.name || '',
+            coverUrl: t.album?.images?.[0]?.url || null,
+            durationMs: t.duration_ms || 0,
+            spotifyUrl: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+          }));
 
-    if (!res) throw new Error('Empty search response from Spotify');
+          const albums = (res.albums?.items || []).filter(Boolean).map((a: any) => ({
+            id: a.id,
+            name: a.name,
+            artist: a.artists?.map((ar: any) => ar.name).join(', ') || 'Unknown Artist',
+            coverUrl: a.images?.[0]?.url || null,
+            trackCount: a.total_tracks || 0,
+            releaseDate: a.release_date || '',
+            spotifyUrl: a.external_urls?.spotify || `https://open.spotify.com/album/${a.id}`,
+          }));
 
-    const tracks = (res.tracks?.items || []).filter(Boolean).map((t: any) => ({
-      id: t.id,
-      title: t.name,
-      artist: t.artists?.map((a: any) => a.name).join(', ') || 'Unknown Artist',
-      artistNames: t.artists?.map((a: any) => a.name) || [],
-      album: t.album?.name || '',
-      coverUrl: t.album?.images?.[0]?.url || null,
-      durationMs: t.duration_ms || 0,
-      spotifyUrl: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
-    }));
+          const artists = (res.artists?.items || []).filter(Boolean).map((ar: any) => ({
+            id: ar.id,
+            name: ar.name,
+            coverUrl: ar.images?.[0]?.url || null,
+            genres: ar.genres || [],
+            spotifyUrl: ar.external_urls?.spotify || `https://open.spotify.com/artist/${ar.id}`,
+          }));
 
-    const albums = (res.albums?.items || []).filter(Boolean).map((a: any) => ({
-      id: a.id,
-      name: a.name,
-      artist: a.artists?.map((ar: any) => ar.name).join(', ') || 'Unknown Artist',
-      coverUrl: a.images?.[0]?.url || null,
-      trackCount: a.total_tracks || 0,
-      releaseDate: a.release_date || '',
-      spotifyUrl: a.external_urls?.spotify || `https://open.spotify.com/album/${a.id}`,
-    }));
+          const playlists = (res.playlists?.items || []).filter(Boolean).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+            owner: p.owner?.display_name || p.owner?.id || '',
+            coverUrl: p.images?.[0]?.url || null,
+            trackCount: p.tracks?.total || 0,
+            spotifyUrl: p.external_urls?.spotify || `https://open.spotify.com/playlist/${p.id}`,
+          }));
 
-    const artists = (res.artists?.items || []).filter(Boolean).map((ar: any) => ({
-      id: ar.id,
-      name: ar.name,
-      coverUrl: ar.images?.[0]?.url || null,
-      genres: ar.genres || [],
-      spotifyUrl: ar.external_urls?.spotify || `https://open.spotify.com/artist/${ar.id}`,
-    }));
+          return { tracks, albums, artists, playlists };
+        }
+      }
+    } catch (err) {
+      console.warn('[Spotify] Search failed, falling back to YouTube Music search:', err);
+    }
 
-    const playlists = (res.playlists?.items || []).filter(Boolean).map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      description: p.description || '',
-      owner: p.owner?.display_name || p.owner?.id || '',
-      coverUrl: p.images?.[0]?.url || null,
-      trackCount: p.tracks?.total || 0,
-      spotifyUrl: p.external_urls?.spotify || `https://open.spotify.com/playlist/${p.id}`,
-    }));
+    // Fallback to YouTube Music Search
+    console.log('[Search] Using YouTube Music search fallback for query:', query);
+    const ytResult = await YTMusicApi.searchYTMusic(query, types);
 
-    return { tracks, albums, artists, playlists };
+    // If YTMusic search also returned empty for tracks, try single video search fallback
+    if (ytResult.tracks.length === 0 && ytResult.albums.length === 0 && ytResult.playlists.length === 0) {
+      const singleVideo = await YTMusicApi.searchVideo('', query);
+      if (singleVideo) {
+        ytResult.tracks.push({
+          id: singleVideo.videoId,
+          title: singleVideo.title,
+          artist: singleVideo.artist,
+          artistNames: [singleVideo.artist],
+          album: 'YouTube Music',
+          coverUrl: `https://i.ytimg.com/vi/${singleVideo.videoId}/hqdefault.jpg`,
+          durationMs: singleVideo.durationSeconds * 1000,
+          spotifyUrl: `https://www.youtube.com/watch?v=${singleVideo.videoId}`,
+        });
+      }
+    }
+
+    return ytResult;
   }
 }
 

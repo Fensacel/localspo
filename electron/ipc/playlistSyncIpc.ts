@@ -99,7 +99,12 @@ export function registerPlaylistSyncIpc(
       keepRemovedSongs: boolean,
     ) => {
       try {
-        const result = await service.diffPlaylist(spotifyId, localSpotifyIds, { keepRemovedSongs });
+        const result = await service.diffPlaylist(
+          spotifyId,
+          localSpotifyIds,
+          { keepRemovedSongs },
+          downloaderService,
+        );
 
         // Queue new tracks for download with the playlist job ID attached
         if (result.newTrackIds.length > 0) {

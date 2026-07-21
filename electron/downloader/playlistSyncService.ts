@@ -224,6 +224,7 @@ export class PlaylistSyncService {
     spotifyPlaylistId: string,
     localSpotifyIds: string[], // spotify track IDs already in local playlist
     settings: { keepRemovedSongs: boolean },
+    downloaderService?: any,
   ): Promise<PlaylistSyncResult> {
     this.broadcastSyncProgress({
       spotifyPlaylistId,
@@ -241,7 +242,7 @@ export class PlaylistSyncService {
     this.broadcastSyncProgress({
       spotifyPlaylistId,
       phase: 'comparing',
-      message: `Comparing ${spotifyTrackIds.length} Spotify tracks with ${localSpotifyIds.length} local tracks...`,
+      message: `Comparing ${spotifyTrackIds.length} Spotify tracks with local library...`,
       newTracks: 0,
       removedTracks: 0,
       totalTracks: spotifyTrackIds.length,
@@ -251,7 +252,18 @@ export class PlaylistSyncService {
     const localSet = new Set(localSpotifyIds);
     const spotifySet = new Set(spotifyTrackIds);
 
-    const newTrackIds = spotifyTrackIds.filter((id) => !localSet.has(id));
+    const newTrackIds = meta.tracks
+      .filter((t) => {
+        if (localSet.has(t.id)) return false;
+        if (downloaderService && typeof downloaderService.isTrackDownloaded === 'function') {
+          if (downloaderService.isTrackDownloaded(t.id, t.isrc, t.title, t.artist)) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .map((t) => t.id);
+
     const removedTrackIds = settings.keepRemovedSongs
       ? []
       : localSpotifyIds.filter((id) => !spotifySet.has(id));
