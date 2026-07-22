@@ -9,11 +9,15 @@ import {
   ListMusic,
   ExternalLink,
   Loader2,
+  Play,
+  Radio,
 } from 'lucide-react';
 import { useSpotifyStore } from '../stores/useSpotifyStore';
 import { useDownloaderStore } from '../stores/useDownloaderStore';
 import { useToastStore } from '@/stores/useToastStore';
-import type { SpotifySearchType } from '../types';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import type { SpotifySearchType, SpotifySearchTrack } from '../types';
+import { createStreamSong } from '@/types/music';
 
 const TYPES: { id: SpotifySearchType; label: string; icon: React.ElementType }[] = [
   { id: 'track', label: 'Songs', icon: Music },
@@ -43,6 +47,7 @@ export function SpotifySearchTab() {
   } = useSpotifyStore();
   const { downloadUrl } = useDownloaderStore();
   const { showToast } = useToastStore();
+  const { setQueue } = usePlayerStore();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: FormEvent) => {
@@ -53,6 +58,24 @@ export function SpotifySearchTab() {
   const handleDownload = async (url: string, name: string) => {
     const ok = await downloadUrl(url);
     if (ok) showToast(`Queued: ${name}`, 'success');
+  };
+
+  const handlePlay = (track: SpotifySearchTrack) => {
+    if (!track.ytVideoId) {
+      showToast('No YouTube Music video ID — cannot stream this track', 'error');
+      return;
+    }
+    const streamSong = createStreamSong({
+      id: `stream_${track.ytVideoId}`,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      duration: track.durationMs ? track.durationMs / 1000 : 0,
+      coverUrl: track.coverUrl || undefined,
+      ytVideoId: track.ytVideoId,
+    });
+    setQueue([streamSong], 0, 'Search Results');
+    showToast(`Streaming: ${track.artist} — ${track.title}`, 'info');
   };
 
   const currentResults = searchResults
@@ -125,6 +148,14 @@ export function SpotifySearchTab() {
             </button>
           );
         })}
+
+        {/* Streaming hint for tracks */}
+        {searchType === 'track' && searchResults && (
+          <span className="ml-auto flex items-center gap-1.5 text-xs text-white/25">
+            <Radio size={11} />
+            Click <Play size={9} className="inline" /> to stream instantly
+          </span>
+        )}
       </div>
 
       {/* ── Results Area ───────────────────────────────────────────── */}
@@ -139,7 +170,7 @@ export function SpotifySearchTab() {
             className="flex flex-col items-center justify-center h-48 gap-3"
           >
             <Loader2 size={28} className="text-primary animate-spin" />
-            <p className="text-sm text-white/40">Searching Spotify...</p>
+            <p className="text-sm text-white/40">Searching...</p>
           </motion.div>
         )}
 
@@ -186,6 +217,8 @@ export function SpotifySearchTab() {
                     album={track.album}
                     duration={formatDuration(track.durationMs)}
                     spotifyUrl={track.spotifyUrl}
+                    canStream={!!track.ytVideoId}
+                    onPlay={() => handlePlay(track)}
                     onDownload={() => handleDownload(track.spotifyUrl, track.title)}
                   />
                 ))}
@@ -261,10 +294,12 @@ export function SpotifySearchTab() {
             <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center">
               <Search size={24} className="text-white/25" />
             </div>
-            <p className="text-sm font-semibold text-white/40">Search Spotify</p>
+            <p className="text-sm font-semibold text-white/40">Search YouTube Music</p>
             <p className="text-xs text-white/25 text-center max-w-xs leading-relaxed">
-              Find songs, albums, artists, or playlists and download
-              them directly into your library
+              Find songs, albums, artists, or playlists.
+              <br />
+              <span className="text-primary/60">Click ▶ to stream instantly</span>, or{' '}
+              <span className="text-white/40">⬇ to download.</span>
             </p>
           </motion.div>
         )}
@@ -273,7 +308,7 @@ export function SpotifySearchTab() {
   );
 }
 
-// ── TrackRow — Downtify-style result card ─────────────────────────────────────
+// ── TrackRow — result card with Play + Download ───────────────────────────────
 
 interface TrackRowProps {
   index: number;
@@ -284,6 +319,8 @@ interface TrackRowProps {
   album: string;
   duration?: string;
   spotifyUrl: string;
+  canStream?: boolean;
+  onPlay?: () => void;
   onDownload?: () => void;
   downloadLabel?: string;
 }
@@ -297,6 +334,8 @@ function TrackRow({
   album,
   duration,
   spotifyUrl,
+  canStream,
+  onPlay,
   onDownload,
   downloadLabel,
 }: TrackRowProps) {
@@ -311,7 +350,7 @@ function TrackRow({
     >
       {/* Album art */}
       <div
-        className={`w-14 h-14 shrink-0 bg-white/5 overflow-hidden ${coverRound ? 'rounded-full' : 'rounded-md'}`}
+        className={`w-14 h-14 shrink-0 bg-white/5 overflow-hidden relative ${coverRound ? 'rounded-full' : 'rounded-md'}`}
       >
         {cover && !hasError ? (
           <img
@@ -325,6 +364,17 @@ function TrackRow({
           <div className="w-full h-full flex items-center justify-center">
             <Music size={18} className="text-white/20" />
           </div>
+        )}
+
+        {/* Play overlay on hover (streaming songs only) */}
+        {canStream && onPlay && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPlay(); }}
+            className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-md"
+            title="Stream this song"
+          >
+            <Play size={20} className="text-primary fill-primary drop-shadow-lg" />
+          </button>
         )}
       </div>
 
@@ -341,17 +391,29 @@ function TrackRow({
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-        {/* Open on Spotify */}
+      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Stream button (track only) */}
+        {canStream && onPlay && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPlay(); }}
+            title="Stream now"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary/15 hover:bg-primary/25 text-primary text-xs font-semibold transition-colors"
+          >
+            <Play size={11} className="fill-primary" />
+            Play
+          </button>
+        )}
+
+        {/* Open externally */}
         <a
           href={spotifyUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-white/30 hover:text-white/70 transition-colors p-1"
-          title="Open on Spotify"
+          className="text-white/30 hover:text-white/70 transition-colors p-1.5"
+          title="Open link"
           onClick={(e) => e.stopPropagation()}
         >
-          <ExternalLink size={15} />
+          <ExternalLink size={14} />
         </a>
 
         {/* Download */}
@@ -359,9 +421,9 @@ function TrackRow({
           <button
             onClick={onDownload}
             title={downloadLabel || 'Download'}
-            className="text-primary hover:text-primary/80 transition-colors p-1"
+            className="text-white/40 hover:text-white transition-colors p-1.5"
           >
-            <Download size={17} />
+            <Download size={16} />
           </button>
         )}
       </div>

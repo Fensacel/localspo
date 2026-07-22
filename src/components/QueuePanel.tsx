@@ -126,15 +126,26 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
               className="flex items-center gap-3 p-2.5 rounded-xl bg-primary/10 border border-primary/20"
             >
               <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-white/[0.02] flex items-center justify-center">
-                {currentSong.coverPath ? (
-                  <img
-                    src={getImageUrl(currentSong.coverPath)}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <Music size={14} className="text-text/20" />
-                )}
+                {(() => {
+                  const coverSrc = (currentSong as any).coverUrl || currentSong.remoteCoverUrl || (currentSong.coverPath ? getImageUrl(currentSong.coverPath) : null) || (currentSong.ytVideoId ? `https://i.ytimg.com/vi/${currentSong.ytVideoId}/hqdefault.jpg` : null);
+
+                  return coverSrc ? (
+                    <img
+                      src={coverSrc}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        if (currentSong.ytVideoId) {
+                          (e.target as HTMLImageElement).src = `https://i.ytimg.com/vi/${currentSong.ytVideoId}/hqdefault.jpg`;
+                        }
+                      }}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Music size={14} className="text-text/20" />
+                  );
+                })()}
+
                 <button
                   onClick={() => handlePlaySong(queueIndex)}
                   className="absolute inset-0 bg-black/40 flex items-center justify-center text-white"
@@ -189,7 +200,7 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
             <div className="space-y-0.5">
               {userQueuedSongs.map((song, idx) => {
                 const actualIndex = queue.indexOf(song, queueIndex + 1);
-                const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : null;
+                const coverSrc = (song as any).coverUrl || song.remoteCoverUrl || (song.coverPath ? getImageUrl(song.coverPath) : null) || (song.ytVideoId ? `https://i.ytimg.com/vi/${song.ytVideoId}/hqdefault.jpg` : null);
                 return (
                   <div
                     key={`user-queue-${song.id}-${idx}`}
@@ -202,7 +213,17 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
                   >
                     <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-white/[0.02] flex items-center justify-center">
                       {coverSrc ? (
-                        <img src={coverSrc} alt="" className="w-full h-full object-cover" />
+                        <img
+                          src={coverSrc}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            if (song.ytVideoId) {
+                              (e.target as HTMLImageElement).src = `https://i.ytimg.com/vi/${song.ytVideoId}/hqdefault.jpg`;
+                            }
+                          }}
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <Music size={12} className="text-text/20" />
                       )}
@@ -260,7 +281,7 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
             <div className="space-y-0.5">
               {nextUpSongs.map((song, idx) => {
                 const actualIndex = queue.indexOf(song, queueIndex + 1);
-                const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : null;
+                const coverSrc = (song as any).coverUrl || song.remoteCoverUrl || (song.coverPath ? getImageUrl(song.coverPath) : null) || (song.ytVideoId ? `https://i.ytimg.com/vi/${song.ytVideoId}/hqdefault.jpg` : null);
                 return (
                   <div
                     key={`next-up-${song.id}-${idx}`}
@@ -273,10 +294,22 @@ export function QueuePanel({ onClose, isOverlay = false }: QueuePanelProps) {
                   >
                     <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-white/[0.02] flex items-center justify-center">
                       {coverSrc ? (
-                        <img src={coverSrc} alt="" className="w-full h-full object-cover" />
+                        <img
+                          src={coverSrc}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            if (song.ytVideoId) {
+                              (e.target as HTMLImageElement).src = `https://i.ytimg.com/vi/${song.ytVideoId}/hqdefault.jpg`;
+                            }
+                          }}
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <Music size={12} className="text-text/20" />
                       )}
+
+
                       <button
                         onClick={() => handlePlaySong(actualIndex)}
                         className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"

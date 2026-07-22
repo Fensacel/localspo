@@ -469,19 +469,24 @@ export class DownloaderService {
         }
       }
 
-      // Fetch lyrics if enabled
+      // Fetch lyrics and write .lrc file
       let lyricsContent: string | null = null;
-      if (this.settings.getLyrics) {
+      try {
         const lyricsRes = await LyricsApi.fetchLyrics(item.artist, item.title, item.album);
         if (lyricsRes.syncedLyrics || lyricsRes.plainLyrics) {
           lyricsContent = lyricsRes.syncedLyrics || lyricsRes.plainLyrics;
-
-          if (this.settings.createLrcFile && lyricsRes.syncedLyrics) {
+          const lrcText = lyricsRes.syncedLyrics || lyricsRes.plainLyrics;
+          if (lrcText) {
+            if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
             const lrcFilePath = path.join(downloadDir, `${fileNameBase}.lrc`);
-            fs.writeFileSync(lrcFilePath, lyricsRes.syncedLyrics, 'utf-8');
+            fs.writeFileSync(lrcFilePath, lrcText, 'utf-8');
+            console.log(`[DownloaderService] Successfully saved .lrc file: ${lrcFilePath}`);
           }
         }
+      } catch (lrcErr) {
+        console.warn('[DownloaderService] Failed to fetch or write lyrics:', lrcErr);
       }
+
 
       // Embed tags using AudioTagger on the temp file
       await AudioTagger.embedTags(tempAudioFile, binaries.ffmpeg, {

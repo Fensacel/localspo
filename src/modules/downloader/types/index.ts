@@ -111,6 +111,8 @@ export interface SpotifySearchTrack {
   coverUrl: string | null;
   durationMs: number;
   spotifyUrl: string;
+  /** YouTube videoId — present when result comes from YouTube Music API */
+  ytVideoId?: string;
 }
 
 export interface SpotifySearchAlbum {

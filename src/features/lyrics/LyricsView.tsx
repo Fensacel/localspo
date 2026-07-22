@@ -6,6 +6,7 @@ import type { LyricsData } from '@/types';
 import { Mic } from 'lucide-react';
 
 import { RomanizationService } from '@/modules/romanization/RomanizationService';
+import { LyricOffsetStore } from '@/services/lyricOffsetStore';
 
 export function LyricsView() {
   const { currentSong, currentTime } = usePlayerStore();
@@ -30,32 +31,46 @@ export function LyricsView() {
       setLyrics(null);
 
       try {
-        const result = await window.electronAPI.lyrics.read(
-          currentSong.id,
-          currentSong.path,
-          currentSong.lrcPath,
-          currentSong.hasEmbeddedLyrics,
-          currentSong.artist,
-          currentSong.title,
-          currentSong.album,
-          currentSong.duration,
+        const timeoutPromise = new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 15000)
         );
+
+
+        const result = await Promise.race([
+          window.electronAPI.lyrics.read(
+            currentSong.id,
+            currentSong.path,
+            currentSong.lrcPath,
+            currentSong.hasEmbeddedLyrics,
+            currentSong.artist,
+            currentSong.title,
+            currentSong.album,
+            currentSong.duration
+          ),
+          timeoutPromise,
+        ]);
 
         if (cancelled) return;
 
-        if (result) {
-          const parsed = parseLyrics(result.content);
-          const processed = await RomanizationService.processLyrics(parsed, currentSong.id);
-          if (!cancelled) setLyrics(processed);
+        if (result && result.content) {
+          const parsed = parseLyrics(result.content, currentSong.artist);
+          setLyrics(parsed);
+          RomanizationService.clearCache(currentSong.id);
+          RomanizationService.processLyrics(parsed, currentSong.id, true).then((processed) => {
+            if (!cancelled && processed) setLyrics(processed);
+          });
         } else {
+          console.warn('[LyricsView] No lyrics result returned for:', currentSong.artist, currentSong.title);
           setLyrics(null);
         }
-      } catch {
+      } catch (err) {
+        console.error('[LyricsView] Failed to fetch lyrics:', err);
         if (!cancelled) setLyrics(null);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
     };
+
 
     loadLyrics();
 
@@ -64,11 +79,12 @@ export function LyricsView() {
     };
   }, [currentSong?.id]);
 
-  // Find current lyric index
+  // Find current lyric index taking per-song offset into account
+  const offset = currentSong ? LyricOffsetStore.getOffset(currentSong.id) : 0;
   const currentIndex = useMemo(() => {
     if (!lyrics?.synced) return -1;
-    return findCurrentLyricIndex(lyrics.lines, currentTime);
-  }, [lyrics, currentTime]);
+    return findCurrentLyricIndex(lyrics.lines, currentTime - offset);
+  }, [lyrics, currentTime, offset]);
 
   // Auto-scroll to current lyric line
   useEffect(() => {
@@ -177,8 +193,9 @@ export function LyricsView() {
                     }`}
                     onClick={() => {
                       if (seekByLyricsEnabled === false) return;
-                      usePlayerStore.getState().setCurrentTime(line.time);
-                      window.dispatchEvent(new CustomEvent('player:seek', { detail: line.time }));
+                      const targetTime = Math.max(0, line.time + offset);
+                      usePlayerStore.getState().setCurrentTime(targetTime);
+                      window.dispatchEvent(new CustomEvent('player:seek', { detail: targetTime }));
                     }}
                   >
                     {/* Primary Line */}

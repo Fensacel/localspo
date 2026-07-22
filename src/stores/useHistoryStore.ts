@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type { HistoryEntry } from '@/types';
+import type { Song, HistoryEntry } from '@/types';
 import { platformService } from '@/platform';
 
 interface HistoryState {
   entries: HistoryEntry[];
   isLoaded: boolean;
   loadHistory: () => Promise<void>;
-  addHistoryEntry: (songId: string, duration: number) => Promise<void>;
+  addHistoryEntry: (song: Song) => Promise<void>;
   clearHistory: () => Promise<void>;
   removeFromHistory: (songId: string) => Promise<void>;
 }
@@ -30,54 +30,29 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     }
   },
 
-  addHistoryEntry: async (songId, duration) => {
+  addHistoryEntry: async (song) => {
     const { entries } = get();
     const now = Date.now();
 
     // Prevent duplicate entry if the most recent history entry is for the same song within 60 seconds
     if (entries.length > 0) {
       const lastEntry = entries[0];
-      if (lastEntry.songId === songId && now - lastEntry.playedAt < 60000) {
+      if (lastEntry.songId === song.id && now - lastEntry.playedAt < 60000) {
         return;
       }
     }
 
     // Create new entry
     const newEntry: HistoryEntry = {
-      songId,
+      songId: song.id,
       playedAt: now,
-      duration,
+      duration: song.duration,
+      songData: song,
     };
 
-    // Filter out duplicates within a short timeframe or just keep the last 1000 entries
     const updatedEntries = [newEntry, ...entries].slice(0, 1000);
-
     set({ entries: updatedEntries });
     await platformService.data.write('history.json', { entries: updatedEntries });
-
-    // Also update play count in the library store and write back to library.json
-    try {
-      const { songs, albums, artists, lastScan } = useLibraryStore.getState();
-      const updatedSongs = songs.map((s) => {
-        if (s.id === songId) {
-          return { ...s, playCount: (s.playCount || 0) + 1 };
-        }
-        return s;
-      });
-
-      // Update library state
-      useLibraryStore.setState({ songs: updatedSongs });
-
-      // Save to library.json
-      await platformService.data.write('library.json', {
-        songs: updatedSongs,
-        albums,
-        artists,
-        lastScan,
-      });
-    } catch (err) {
-      console.error('Failed to update song play count:', err);
-    }
   },
 
   clearHistory: async () => {
@@ -93,5 +68,3 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 }));
 
-// We need to import useLibraryStore inside the file to perform library.json updates
-import { useLibraryStore } from './useLibraryStore';

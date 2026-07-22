@@ -178,6 +178,34 @@ export function DownloaderSettingsTab() {
         </div>
       </section>
 
+      {/* Hybrid Streaming & Cache */}
+      <section>
+        <p className="text-xs font-bold text-text/40 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <Settings size={12} />
+          Hybrid Streaming & Cache
+        </p>
+        <div className="glass rounded-2xl border border-white/5 px-4">
+          <SettingRow label="Instant Streaming" desc="Stream audio from YouTube Music instantly without downloading first">
+            <span className="text-xs text-emerald-400 font-semibold px-2 py-1 bg-emerald-500/10 rounded-lg">Active</span>
+          </SettingRow>
+
+          <SettingRow label="Stream URL Cache" desc="Cached direct stream links (valid for ~4 hours)">
+            <button
+              onClick={async () => {
+                if (window.electronAPI?.streaming) {
+                  const result = await window.electronAPI.streaming.pruneCache();
+                  alert(`Cache pruned! Active entries remaining: ${result.cacheSize}`);
+                }
+              }}
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/15 rounded-lg text-xs font-medium text-text transition-colors"
+            >
+              Clear Expired Cache
+            </button>
+          </SettingRow>
+        </div>
+      </section>
+
+
       {/* Save Button */}
       <div className="flex justify-end">
         <button

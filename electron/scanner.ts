@@ -4,8 +4,9 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { getBinaryPaths } from './downloader/binaryManager';
 import { AudioTagger } from './downloader/tagger';
-
 import { cleanMusicMetadata } from './downloader/metadataCleaner';
+import { LyricsApi } from './downloader/lyricsApi';
+
 
 const SUPPORTED_EXTENSIONS = new Set([
   '.flac', '.mp3', '.aac', '.alac', '.wav', '.aiff', '.ogg', '.m4a',
@@ -276,6 +277,44 @@ async function readMetadata(filePath: string, cachePath: string): Promise<RawMet
     console.error(`Error reading metadata for ${filePath}:`, err);
     return null;
   }
+}
+
+
+
+function extractEmbeddedLyricsFromMetadata(metadata: any): { sylt: string | null; uslt: string | null } {
+  let sylt: string | null = null;
+  let uslt: string | null = null;
+
+  if (metadata?.native) {
+    for (const tagFormat of Object.keys(metadata.native)) {
+      const tagList = metadata.native[tagFormat];
+      if (Array.isArray(tagList)) {
+        for (const tag of tagList) {
+          const id = String(tag.id || '').toUpperCase();
+          if (id === 'SYLT') {
+            const formatted = formatEmbeddedLyrics(tag.value);
+            if (formatted) sylt = formatted;
+          } else if (
+            id === 'USLT' ||
+            id === 'LYRICS' ||
+            id === 'UNSYNCEDLYRICS' ||
+            id === 'UNSYNCED LYRICS' ||
+            id === '©LYR'
+          ) {
+            const formatted = formatEmbeddedLyrics(tag.value);
+            if (formatted) uslt = formatted;
+          }
+        }
+      }
+    }
+  }
+
+  if (!uslt && metadata?.common?.lyrics) {
+    const formatted = formatEmbeddedLyrics(metadata.common.lyrics);
+    if (formatted) uslt = formatted;
+  }
+
+  return { sylt, uslt };
 }
 
 export function registerScannerIpc(getDataPath: () => string): void {
@@ -628,51 +667,116 @@ export function registerScannerIpc(getDataPath: () => string): void {
     }
   });
 
-  // Read lyrics
+
+
+  // Read lyrics following strict 7-priority order
   ipcMain.handle('lyrics:read', async (
     _event,
     songId: string,
-    audioPath: string,
+    audioPath: string | null,
     lrcPath: string | null,
-    hasEmbeddedLyrics: boolean
+    _hasEmbeddedLyrics: boolean,
+    artist?: string,
+    title?: string,
+    album?: string,
+    duration?: number
   ) => {
     const dataPath = getDataPath();
+    const cleanLrcTags = (content: string): string => {
+      return content;
+    };
 
-    // Try embedded lyrics from cache first
-    if (hasEmbeddedLyrics) {
-      const cachedPath = path.join(dataPath, 'cache', 'lyrics', `${songId}.txt`);
-      if (fs.existsSync(cachedPath)) {
-        const cachedContent = fs.readFileSync(cachedPath, 'utf-8');
-        if (cachedContent && cachedContent !== '[object Object]') {
-          return { source: 'embedded', content: cachedContent };
-        }
-      }
+    const cachedPath = path.join(dataPath, 'cache', 'lyrics', `${songId}.txt`);
 
-      // If cache doesn't exist or is corrupt, parse it on the fly and update cache
+    // Priority 1 & 2: Embedded SYLT (synchronized) and USLT (plain)
+    if (audioPath && fs.existsSync(audioPath)) {
       try {
         const mm = (await import('music-metadata')) as any;
         const metadata = await mm.parseFile(audioPath);
-        if (metadata.common.lyrics && metadata.common.lyrics.length > 0) {
-          const formatted = formatEmbeddedLyrics(metadata.common.lyrics);
-          if (formatted) {
-            const lyricsDir = path.join(dataPath, 'cache', 'lyrics');
-            if (!fs.existsSync(lyricsDir)) fs.mkdirSync(lyricsDir, { recursive: true });
-            fs.writeFileSync(cachedPath, formatted, 'utf-8');
-            return { source: 'embedded', content: formatted };
-          }
+        const { sylt, uslt } = extractEmbeddedLyricsFromMetadata(metadata);
+        
+        if (sylt) {
+          console.log(`[LyricsEngine] Priority 1 Hit (Embedded SYLT) for: ${songId}`);
+          return { source: 'embedded_sylt', content: cleanLrcTags(sylt) };
+        }
+        if (uslt) {
+          console.log(`[LyricsEngine] Priority 2 Hit (Embedded USLT) for: ${songId}`);
+          return { source: 'embedded_uslt', content: cleanLrcTags(uslt) };
         }
       } catch (err) {
-        console.error('Error parsing embedded lyrics on the fly:', err);
+        console.error('[LyricsEngine] Error parsing embedded ID3 tags:', err);
       }
     }
 
-    // Try LRC file second (synced)
+    // Priority 3: Local .lrc file
     if (lrcPath && fs.existsSync(lrcPath)) {
-      return { source: 'lrc', content: fs.readFileSync(lrcPath, 'utf-8') };
+      console.log(`[LyricsEngine] Priority 3 Hit (Local .lrc) for: ${songId}`);
+      return { source: 'local_lrc', content: cleanLrcTags(fs.readFileSync(lrcPath, 'utf-8')) };
+    }
+    if (audioPath) {
+      const autoLrcPath = audioPath.substring(0, audioPath.lastIndexOf('.')) + '.lrc';
+      if (fs.existsSync(autoLrcPath)) {
+        console.log(`[LyricsEngine] Priority 3 Hit (Auto .lrc) for: ${songId}`);
+        return { source: 'local_lrc', content: cleanLrcTags(fs.readFileSync(autoLrcPath, 'utf-8')) };
+      }
     }
 
+    // Priority 4: Cached lyrics
+    if (fs.existsSync(cachedPath)) {
+      const cachedContent = fs.readFileSync(cachedPath, 'utf-8');
+      const isSongChinese = /[\u4e00-\u9fa5]/.test(artist || '');
+      const cacheHasChinese = /[\u4e00-\u9fa5]{3,}/.test(cachedContent);
+      // Detect garbled/corrupt encoding — replacement chars (U+FFFD) or control chars in first 100 chars
+      const hasGarbledChars = /[\ufffd\u0000-\u0008\u000e-\u001f\u007f-\u009f]/.test(cachedContent.slice(0, 200));
+
+      if (hasGarbledChars || (!isSongChinese && cacheHasChinese) || cachedContent.startsWith('NO_LYRICS') || cachedContent.trim().length <= 10) {
+        console.warn(`[LyricsEngine] Invalidating bad/corrupt cached lyrics for: ${artist} - ${title}`);
+        try {
+          fs.unlinkSync(cachedPath);
+        } catch {}
+      } else if (
+        cachedContent &&
+        cachedContent.trim().length > 10 &&
+        cachedContent !== '[object Object]'
+      ) {
+        console.log(`[LyricsEngine] Priority 4 Hit (Disk Cache) for: ${songId}`);
+        return { source: 'cached', content: cleanLrcTags(cachedContent) };
+      }
+    }
+
+    // Priority 5 & 6: LRCLIB (synced) / Plain lyrics provider
+    if (artist && title) {
+      try {
+        console.log(`[LyricsEngine] Querying Priority 5 & 6 (LRCLIB/Online) for: ${artist} - ${title} (Duration: ${duration}s)`);
+        const lyricsRes = await LyricsApi.fetchLyrics(artist, title, album, duration);
+
+        if (lyricsRes.syncedLyrics) {
+          console.log(`[LyricsEngine] Priority 5 Hit (LRCLIB Synced) for: ${artist} - ${title}`);
+          const cleanedText = cleanLrcTags(lyricsRes.syncedLyrics);
+          const lyricsDir = path.join(dataPath, 'cache', 'lyrics');
+          if (!fs.existsSync(lyricsDir)) fs.mkdirSync(lyricsDir, { recursive: true });
+          fs.writeFileSync(cachedPath, cleanedText, 'utf-8');
+          return { source: 'lrclib_synced', content: cleanedText };
+        }
+
+        if (lyricsRes.plainLyrics) {
+          console.log(`[LyricsEngine] Priority 6 Hit (Plain Lyrics Provider) for: ${artist} - ${title}`);
+          const cleanedText = cleanLrcTags(lyricsRes.plainLyrics);
+          const lyricsDir = path.join(dataPath, 'cache', 'lyrics');
+          if (!fs.existsSync(lyricsDir)) fs.mkdirSync(lyricsDir, { recursive: true });
+          fs.writeFileSync(cachedPath, cleanedText, 'utf-8');
+          return { source: 'plain_lyrics', content: cleanedText };
+        }
+      } catch (err) {
+        console.warn('[LyricsEngine] Online fetch failed:', err);
+      }
+    }
+
+    // Priority 7: No lyrics
+    console.log(`[LyricsEngine] Priority 7 (No lyrics found) for: ${artist} - ${title}`);
     return null;
   });
+
 
   // Update song tags & metadata
   ipcMain.handle('scanner:updateTags', async (_event, payload: {
@@ -932,4 +1036,3 @@ export function registerScannerIpc(getDataPath: () => string): void {
     }
   });
 }
-

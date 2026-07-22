@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { registerScannerIpc } from './scanner';
 import { registerDownloaderIpc } from './ipc/downloaderIpc';
 import { registerPlaylistSyncIpc } from './ipc/playlistSyncIpc';
+import { registerStreamingIpc } from './ipc/streamingIpc';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,7 +71,7 @@ function ensureDataFiles(): void {
     }
   }
 
-  const cacheDirs = ['cover', 'lyrics', 'waveform'];
+  const cacheDirs = ['cover', 'lyrics', 'waveform', 'stream'];
   for (const dir of cacheDirs) {
     const dirPath = path.join(dataPath, 'cache', dir);
     if (!fs.existsSync(dirPath)) {
@@ -428,6 +429,7 @@ app.whenReady().then(() => {
   registerScannerIpc(getDataPath);
   const downloaderService = registerDownloaderIpc(getDataPath);
   registerPlaylistSyncIpc(getDataPath, downloaderService);
+  registerStreamingIpc(getDataPath, () => mainWindow);
   setupAutoUpdater();
   createWindow();
 

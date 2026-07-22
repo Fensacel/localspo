@@ -1,7 +1,7 @@
 import { useHistoryStore, useLibraryStore, usePlayerStore } from '@/stores';
 import { Clock, Play, Music, BarChart2, Award } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { formatTime } from '@/utils';
+import { formatTime, getImageUrl } from '@/utils';
 import type { Song } from '@/types';
 import { useState, useMemo } from 'react';
 import { SongContextMenu } from '@/components/SongContextMenu';
@@ -21,7 +21,7 @@ export function HistoryPage() {
   const historySongs = useMemo(() => {
     return entries
       .map((entry) => {
-        const song = getSongById(entry.songId);
+        const song = getSongById(entry.songId) || entry.songData;
         return song ? { ...song, playedAt: entry.playedAt } : null;
       })
       .filter((song): song is Song & { playedAt: number } => song !== null);
@@ -36,19 +36,20 @@ export function HistoryPage() {
 
     const filtered = entries.filter((e) => now - e.playedAt <= periodMs);
 
-    const counts: Record<string, number> = {};
+    const map = new Map<string, { song: Song; count: number }>();
     for (const entry of filtered) {
-      counts[entry.songId] = (counts[entry.songId] || 0) + 1;
+      const song = getSongById(entry.songId) || entry.songData;
+      if (song) {
+        const existing = map.get(song.id);
+        map.set(song.id, { song, count: (existing?.count || 0) + 1 });
+      }
     }
 
-    return Object.entries(counts)
-      .map(([songId, count]) => {
-        const song = getSongById(songId);
-        return song ? { ...song, playCountInPeriod: count } : null;
-      })
-      .filter((song): song is Song & { playCountInPeriod: number } => song !== null)
+    return Array.from(map.values())
+      .map(({ song, count }) => ({ ...song, playCountInPeriod: count }))
       .sort((a, b) => b.playCountInPeriod - a.playCountInPeriod);
   }, [entries, activePeriod, getSongById]);
+
 
   const handlePlaySong = (song: Song & { playedAt: number }) => {
     const songList = historySongs.map((hs) => ({ ...hs }));
@@ -122,8 +123,8 @@ export function HistoryPage() {
             {historySongs.map((song, index) => {
               const isCurrent = index === 0 && currentSong?.id === song.id;
               const coverSrc = song.coverPath
-                ? `local-image://${encodeURIComponent(song.coverPath)}`
-                : null;
+                ? getImageUrl(song.coverPath)
+                : (song as any).coverUrl || (song as any).remoteCoverUrl || null;
 
               return (
                 <motion.div
@@ -218,8 +219,8 @@ export function HistoryPage() {
               {statsSongs.map((song, index) => {
                 const isCurrent = currentSong?.id === song.id;
                 const coverSrc = song.coverPath
-                  ? `local-image://${encodeURIComponent(song.coverPath)}`
-                  : null;
+                  ? getImageUrl(song.coverPath)
+                  : (song as any).coverUrl || (song as any).remoteCoverUrl || null;
 
                 return (
                   <motion.div

@@ -144,14 +144,19 @@ export function NowPlayingOverlay() {
 
   // ── Extract album colors ──────────────────────────────
   useEffect(() => {
-    if (!currentSong?.coverPath) {
+    const imgSrc = currentSong?.coverPath
+      ? getImageUrl(currentSong.coverPath)
+      : currentSong?.remoteCoverUrl || null;
+
+    if (!imgSrc) {
       setBgColors([[20, 20, 40], [60, 20, 100]]);
       return;
     }
-    extractColors(getImageUrl(currentSong.coverPath))
+    extractColors(imgSrc)
       .then(setBgColors)
       .catch(() => setBgColors([[20, 20, 40], [60, 20, 100]]));
-  }, [currentSong?.coverPath]);
+  }, [currentSong?.coverPath, currentSong?.remoteCoverUrl]);
+
 
   // ── Load lyrics ───────────────────────────────────────
   useEffect(() => {
@@ -222,7 +227,11 @@ export function NowPlayingOverlay() {
 
   if (!showNowPlaying || !currentSong) return null;
 
-  const coverSrc = currentSong.coverPath ? getImageUrl(currentSong.coverPath) : '';
+  const isStreaming = !currentSong.path && (currentSong.sourceType === 'streaming' || !!currentSong.ytVideoId);
+  const coverSrc = currentSong.coverPath
+    ? getImageUrl(currentSong.coverPath)
+    : (currentSong.remoteCoverUrl || '');
+
   const isFav = isFavoriteSong(currentSong.id);
   const progressPct = duration > 0 ? localTime / duration : 0;
   const effectiveVolume = isMuted ? 0 : volume;
@@ -256,6 +265,7 @@ export function NowPlayingOverlay() {
                 src={coverSrc}
                 alt=""
                 draggable={false}
+                referrerPolicy="no-referrer"
                 className="absolute inset-0 w-full h-full object-cover scale-[1.3]"
                 style={{ filter: 'blur(80px) saturate(200%) brightness(0.45)' }}
               />
@@ -357,6 +367,12 @@ export function NowPlayingOverlay() {
                     {currentSong.title}
                   </h1>
                   <p className="text-white/55 text-base truncate mt-0.5">{currentSong.artist}</p>
+                  {/* Source Badge */}
+                  {isStreaming && (
+                    <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/20">
+                      ☁ Streaming
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={() => toggleFavoriteSong(currentSong.id)}

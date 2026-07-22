@@ -6,6 +6,7 @@ interface LibraryState {
   songs: Song[];
   albums: Album[];
   artists: Artist[];
+  streamSongsMap: Record<string, Song>;
   lastScan: number | null;
   isLoading: boolean;
   scanProgress: ScanProgress;
@@ -20,6 +21,9 @@ interface LibraryState {
   getSongById: (id: string) => Song | undefined;
   getAlbumById: (id: string) => Album | undefined;
   getArtistById: (id: string) => Artist | undefined;
+  addStreamSong: (song: Song) => void;
+
+
   getAlbumSongs: (albumId: string) => Song[];
   getArtistSongs: (artistId: string) => Song[];
   getArtistAlbums: (artistId: string) => Album[];
@@ -53,10 +57,20 @@ interface LibraryState {
   ) => Promise<boolean>;
 }
 
+const getInitialStreamSongsMap = (): Record<string, Song> => {
+  try {
+    const raw = localStorage.getItem('localspo_stream_songs_map');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   songs: [],
   albums: [],
   artists: [],
+  streamSongsMap: getInitialStreamSongsMap(),
   lastScan: null,
   isLoading: false,
   scanProgress: {
@@ -67,17 +81,18 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     message: '',
   },
 
-  setSongs: (songs) => set({ songs }),
+  setSongs: (songs) => set({ songs: songs.filter((s) => !s.sourceType || s.sourceType === 'offline') }),
   setAlbums: (albums) => set({ albums }),
   setArtists: (artists) => set({ artists }),
 
   setLibraryData: (data) =>
     set({
-      songs: data.songs,
-      albums: data.albums,
-      artists: data.artists,
-      lastScan: data.lastScan,
+      songs: (data.songs || []).filter((s) => !s.sourceType || s.sourceType === 'offline'),
+      albums: data.albums || [],
+      artists: data.artists || [],
+      lastScan: data.lastScan || null,
     }),
+
 
   setScanProgress: (progress) =>
     set((state) => ({
@@ -86,9 +101,23 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   setLoading: (isLoading) => set({ isLoading }),
 
-  getSongById: (id) => get().songs.find((s) => s.id === id),
+  getSongById: (id) => get().songs.find((s) => s.id === id) || get().streamSongsMap[id],
   getAlbumById: (id) => get().albums.find((a) => a.id === id),
   getArtistById: (id) => get().artists.find((a) => a.id === id),
+  addStreamSong: (song) => {
+    set((state) => {
+      const updatedMap = {
+        ...state.streamSongsMap,
+        [song.id]: song,
+      };
+      try {
+        localStorage.setItem('localspo_stream_songs_map', JSON.stringify(updatedMap));
+      } catch {}
+      return { streamSongsMap: updatedMap };
+    });
+  },
+
+
 
   getAlbumSongs: (albumId) => {
     const album = get().albums.find((a) => a.id === albumId);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { usePlayerStore, useHistoryStore } from '@/stores';
+import { usePlayerStore, useHistoryStore, useStreamingStore } from '@/stores';
 import { getAudioUrl } from '@/utils';
 
 /**
@@ -86,11 +86,17 @@ export function AudioEngine() {
     }
   }, [currentSong, setIsPlaying]);
 
+  // Load saved playback state on app launch
+  useEffect(() => {
+    usePlayerStore.getState().loadSavedState();
+  }, []);
+
   useEffect(() => {
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     }
   }, [isPlaying]);
+
 
   // Initialize Web Audio API
   const initAudioContext = useCallback(() => {
@@ -167,6 +173,7 @@ export function AudioEngine() {
 
   const lastSongIdRef = useRef<string | null>(null);
   const lastLoggedHistorySongIdRef = useRef<string | null>(null);
+  const streamResolvingRef = useRef(false);
 
   // Synchronize player store (currentSong, isPlaying) with HTMLAudioElement
   useEffect(() => {
@@ -180,6 +187,7 @@ export function AudioEngine() {
       audio.src = '';
       lastSongIdRef.current = null;
       lastLoggedHistorySongIdRef.current = null;
+      streamResolvingRef.current = false;
       if (isPlaying) {
         setIsPlaying(false);
       }
@@ -189,45 +197,141 @@ export function AudioEngine() {
     const isNewSong = lastSongIdRef.current !== currentSong.id;
 
     if (isNewSong) {
-      const src = getAudioUrl(currentSong.path);
-      console.log(`[AudioEngine Sync] New song detected: "${currentSong.title}" by "${currentSong.artist}"`);
-      console.log(`[AudioEngine Sync] Local path: "${currentSong.path}"`);
-      console.log(`[AudioEngine Sync] Formatted source URL: "${src}"`);
-
       lastSongIdRef.current = currentSong.id;
       lastLoggedHistorySongIdRef.current = null;
+      streamResolvingRef.current = false;
 
-      // Verify path on local filesystem
-      if (window.electronAPI?.fs?.exists) {
-        window.electronAPI.fs.exists(currentSong.path).then((exists: boolean) => {
-          console.log(`[AudioEngine PathCheck] File exists on disk: ${exists} for path: "${currentSong.path}"`);
-          if (!exists) {
-            console.error(`[AudioEngine PathCheck] File path is INVALID or file is missing on local disk! path: "${currentSong.path}"`);
+      // ── Determine audio source ────────────────────────────────────────
+      const hasLocalPath = !!currentSong.path;
+
+      if (hasLocalPath) {
+        // ── Offline: serve via local-audio:// protocol ──────────────────
+        const src = getAudioUrl(currentSong.path);
+        console.log(`[AudioEngine Sync] New song (OFFLINE): "${currentSong.title}" → ${src}`);
+
+        // Verify physical existence
+        if (window.electronAPI?.fs?.exists) {
+          window.electronAPI.fs.exists(currentSong.path).then((exists: boolean) => {
+            if (!exists) {
+              console.error(`[AudioEngine PathCheck] File MISSING on disk: "${currentSong.path}"`);
+            }
+          }).catch(() => {});
+        }
+
+        audio.pause();
+        audio.src = src;
+        audio.load();
+        console.log('[AudioEngine Sync] audio.load() called (offline).');
+
+        // Notify source type changed
+        window.dispatchEvent(new CustomEvent('player:sourceType', { detail: 'offline' }));
+      } else if (currentSong.ytVideoId || currentSong.sourceType === 'streaming') {
+        // ── Streaming: resolve URL asynchronously ────────────────────────
+        console.log(`[AudioEngine Sync] New song (STREAMING): "${currentSong.title}" — resolving URL...`);
+        streamResolvingRef.current = true;
+        const autoPlayRequested = usePlayerStore.getState().isPlaying;
+
+        // Notify UI that we're resolving
+        window.dispatchEvent(new CustomEvent('player:sourceType', { detail: 'resolving' }));
+
+        audio.pause();
+
+        // Check cache first (synchronous)
+        const streamingStore = useStreamingStore.getState();
+        const cachedUrl = streamingStore.getCachedUrl(currentSong.id);
+
+        // Aggressively prefetch next 3 songs in queue right away!
+        const { queue: currentQueue, queueIndex: currentIdx } = usePlayerStore.getState();
+        for (let i = 1; i <= 3; i++) {
+          const upcoming = currentQueue[currentIdx + i];
+          if (upcoming && !upcoming.path) {
+            streamingStore.prefetchNext(upcoming);
           }
-        }).catch((err: Error) => {
-          console.error('[AudioEngine PathCheck] Error running existence check:', err);
-        });
-      }
+        }
 
-      // Stop current playback before setting new source
-      audio.pause();
-      audio.src = src;
-      audio.load();
-      console.log('[AudioEngine Sync] audio.load() called.');
+        if (cachedUrl) {
+          console.log(`[AudioEngine Sync] Using cached stream URL for: "${currentSong.title}"`);
+          audio.removeAttribute('crossorigin');
+          teardownWebAudio();
+          audio.src = cachedUrl;
+          audio.load();
+          streamResolvingRef.current = false;
+          window.dispatchEvent(new CustomEvent('player:sourceType', { detail: 'streaming' }));
+          if (autoPlayRequested || usePlayerStore.getState().isPlaying) {
+            audio.play().catch(async (err) => {
+              console.warn('[AudioEngine Sync] Cached stream play() failed. Force refreshing URL:', err);
+              const freshUrl = await streamingStore.resolveStreamUrl(currentSong, true);
+              if (freshUrl && lastSongIdRef.current === currentSong.id) {
+                audio.src = freshUrl;
+                audio.load();
+                audio.play().catch(() => setIsPlaying(false));
+              } else {
+                setIsPlaying(false);
+              }
+            });
+          }
+        } else {
+
+          // Resolve asynchronously
+          streamingStore.resolveStreamUrl(currentSong).then((url) => {
+            // Make sure the song hasn't changed while we were resolving
+            if (lastSongIdRef.current !== currentSong.id) {
+              console.log('[AudioEngine Sync] Song changed during stream resolution, ignoring.');
+              return;
+            }
+            streamResolvingRef.current = false;
+            if (url) {
+              console.log(`[AudioEngine Sync] Stream URL resolved for: "${currentSong.title}"`);
+              audio.removeAttribute('crossorigin');
+              teardownWebAudio();
+              audio.src = url;
+              audio.load();
+              window.dispatchEvent(new CustomEvent('player:sourceType', { detail: 'streaming' }));
+              // Auto-play if requested
+              if (autoPlayRequested || usePlayerStore.getState().isPlaying) {
+                setIsPlaying(true);
+                audio.play().catch((err) => {
+                  console.error('[AudioEngine Sync] Stream play() failed:', err);
+                  setIsPlaying(false);
+                });
+              }
+            } else {
+              console.error(`[AudioEngine Sync] Stream URL resolution failed for: "${currentSong.title}"`);
+              setIsPlaying(false);
+              window.dispatchEvent(new CustomEvent('player:sourceType', { detail: 'error' }));
+            }
+          });
+          // Don't fall through to play() call below — async resolution handles it
+          return;
+        }
+
+      } else {
+        console.warn(`[AudioEngine Sync] Song has no path and no ytVideoId: "${currentSong.title}" — skipping.`);
+        return;
+      }
     }
 
     if (isPlaying) {
       console.log(`[AudioEngine Sync] Playback requested for: "${currentSong.title}"`);
 
+      if (!audio.src || audio.src === window.location.href || audio.src.endsWith('/')) {
+        console.log('[AudioEngine Sync] audio.src not ready yet (resolving stream). Delaying play().');
+        return;
+      }
+
       const startPlayback = async () => {
         try {
           const isLocalProtocolSource = audio.src.startsWith('local-audio://');
-          if (isLocalProtocolSource) {
-            // local-audio:// can be blocked by Chromium CORS when routed via MediaElementAudioSource.
-            // Keep native HTMLAudioElement output path so playback audio remains audible.
+          const isRemoteStream = audio.src.startsWith('http://') || audio.src.startsWith('https://');
+
+          if (isLocalProtocolSource || isRemoteStream) {
+            // Remove crossOrigin attribute and disconnect Web Audio API graph
+            // to prevent CORS blocking on Google Video / YouTube stream URLs and local protocol URLs
+            audio.removeAttribute('crossorigin');
             teardownWebAudio();
-            console.log('[AudioEngine WebAudio] Skipped graph for local-audio:// source to preserve audible playback.');
+            console.log('[AudioEngine WebAudio] Removed crossOrigin & bypassed WebAudio graph for playback.');
           } else {
+            audio.crossOrigin = 'anonymous';
             initAudioContext();
             if (audioContextRef.current?.state === 'suspended') {
               console.log('[AudioEngine Sync] AudioContext suspended. Resuming context...');
@@ -241,10 +345,12 @@ export function AudioEngine() {
           console.log('PLAY SUCCESS');
           console.log(`[AudioEngine Sync] audio.play() promise resolved. Currently playing: "${currentSong.title}"`);
 
+
           if (lastLoggedHistorySongIdRef.current !== currentSong.id) {
             lastLoggedHistorySongIdRef.current = currentSong.id;
-            useHistoryStore.getState().addHistoryEntry(currentSong.id, currentSong.duration);
+            useHistoryStore.getState().addHistoryEntry(currentSong);
           }
+
 
           if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
@@ -253,6 +359,13 @@ export function AudioEngine() {
               album: currentSong.album,
             });
             navigator.mediaSession.playbackState = 'playing';
+          }
+
+          // ── Prefetch next song's stream URL ──────────────────────────
+          const { queue, queueIndex } = usePlayerStore.getState();
+          const nextSong = queue[queueIndex + 1];
+          if (nextSong && !nextSong.path) {
+            useStreamingStore.getState().prefetchNext(nextSong);
           }
         } catch (error) {
           console.error(error);
@@ -275,6 +388,7 @@ export function AudioEngine() {
       }
     }
   }, [currentSong, isPlaying, initAudioContext, setIsPlaying, teardownWebAudio]);
+
 
   // Verbose Event Logging and Store Synchronization
   useEffect(() => {
@@ -361,13 +475,31 @@ export function AudioEngine() {
       playNext();
     };
 
-    const handleError = () => {
+    const handleError = async () => {
       const err = audio.error;
+      if (!audio.src || audio.src === window.location.href || audio.src.endsWith('/') || streamResolvingRef.current) {
+        console.log('[AudioEngine Event] Suppressing error event for empty/resolving src:', err?.message);
+        return;
+      }
+
       console.error('[AudioEngine Event] "error" event fired by HTMLAudioElement!', {
         code: err?.code,
         message: err?.message,
         src: audio.src,
       });
+
+      const current = usePlayerStore.getState().currentSong;
+      if (current && !current.path && (current.ytVideoId || current.sourceType === 'streaming')) {
+        console.warn(`[AudioEngine] Stream error detected. Force refreshing stream URL for: ${current.title}`);
+        const freshUrl = await useStreamingStore.getState().resolveStreamUrl(current, true);
+        if (freshUrl && lastSongIdRef.current === current.id) {
+          audio.src = freshUrl;
+          audio.load();
+          audio.play().catch(() => setIsPlaying(false));
+          return;
+        }
+      }
+
       setIsPlaying(false);
     };
 

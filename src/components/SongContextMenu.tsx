@@ -73,7 +73,7 @@ export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onR
   };
 
   const handleAddToPlaylist = async (playlistId: string) => {
-    await addSongToPlaylist(playlistId, song.id);
+    await addSongToPlaylist(playlistId, song);
     useToastStore.getState().showToast('Added to playlist', 'success');
     onClose();
   };
@@ -84,7 +84,7 @@ export function SongContextMenu({ song, x, y, onClose, onRemoveFromPlaylist, onR
     if (!trimmed) return;
 
     const newPlaylist = await createPlaylist(trimmed);
-    await addSongToPlaylist(newPlaylist.id, song.id);
+    await addSongToPlaylist(newPlaylist.id, song);
     useToastStore.getState().showToast(`Created & added to ${trimmed}`, 'success');
     onClose();
   };

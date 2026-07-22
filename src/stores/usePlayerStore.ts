@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type { Song, RepeatMode, ShuffleMode } from '@/types';
 import { useToastStore } from './useToastStore';
+import { platformService } from '@/platform';
+import { useLibraryStore } from './useLibraryStore';
+import { useStreamingStore } from './useStreamingStore';
 
 interface PlayerState {
   // Current playback
@@ -31,7 +34,9 @@ interface PlayerState {
   showNowPlayingSidebar: boolean;
 
   // Actions
+  loadSavedState: () => Promise<void>;
   setCurrentSong: (song: Song | null) => void;
+
   setIsPlaying: (playing: boolean) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
@@ -71,6 +76,22 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+function prefetchLyrics(song: Song | null) {
+  if (!song || !window.electronAPI?.lyrics?.read) return;
+  window.electronAPI.lyrics
+    .read(
+      song.id,
+      song.path,
+      song.lrcPath,
+      song.hasEmbeddedLyrics,
+      song.artist,
+      song.title,
+      song.album,
+      song.duration
+    )
+    .catch(() => {});
+}
+
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentSong: null,
   isPlaying: false,
@@ -95,7 +116,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   showNowPlaying: false,
   showNowPlayingSidebar: false,
 
-  setCurrentSong: (song) => set({ currentSong: song }),
+  setCurrentSong: (song) => {
+    set({ currentSong: song });
+    if (song) {
+      prefetchLyrics(song);
+      try {
+        const raw = localStorage.getItem('localspo_recently_played_tracks');
+        const existing: any[] = raw ? JSON.parse(raw) : [];
+        const filtered = existing.filter((s) => s.id !== song.id);
+        const updated = [song, ...filtered].slice(0, 20);
+        localStorage.setItem('localspo_recently_played_tracks', JSON.stringify(updated));
+        set({ history: updated });
+      } catch {}
+    }
+  },
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setCurrentTime: (currentTime) => set({ currentTime }),
   setDuration: (duration) => set({ duration }),
@@ -148,15 +182,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queueIndex = safeStartIndex;
     }
 
-    console.log(queue.length);
-    console.log(startIndex);
-    console.log(queue[startIndex]);
+    const playingSong = queue[queueIndex] ?? null;
+    if (playingSong) {
+      prefetchLyrics(playingSong);
+      if (queue[queueIndex + 1]) prefetchLyrics(queue[queueIndex + 1]);
+      try {
+        const raw = localStorage.getItem('localspo_recently_played_tracks');
+        const existing: any[] = raw ? JSON.parse(raw) : [];
+        const filtered = existing.filter((s) => s.id !== playingSong.id);
+        const updated = [playingSong, ...filtered].slice(0, 20);
+        localStorage.setItem('localspo_recently_played_tracks', JSON.stringify(updated));
+        set({ history: updated });
+      } catch {}
+    }
 
     set({
       queue,
       originalQueue,
       queueIndex,
-      currentSong: queue[queueIndex] ?? null,
+      currentSong: playingSong,
       isPlaying: true,
       sourceName: sourceName ?? null,
     });
@@ -392,4 +436,81 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       showQueue: false,
     })),
   setShowNowPlaying: (show) => set({ showNowPlaying: show }),
+
+  loadSavedState: async () => {
+    try {
+      let saved: any = null;
+      const diskData = (await platformService.data.read('playerState.json')) as any;
+      if (diskData && typeof diskData === 'object' && diskData.currentSong) {
+        saved = diskData;
+      } else {
+        const raw = localStorage.getItem('localspo_saved_player_state');
+        if (raw) saved = JSON.parse(raw);
+      }
+
+      if (saved && saved.currentSong) {
+        if (saved.currentSong.ytVideoId || !saved.currentSong.path) {
+          useLibraryStore.getState().addStreamSong(saved.currentSong);
+        }
+        if (Array.isArray(saved.queue)) {
+          saved.queue.forEach((s: Song) => {
+            if (s.ytVideoId || !s.path) {
+              useLibraryStore.getState().addStreamSong(s);
+            }
+          });
+        }
+
+        set({
+          currentSong: saved.currentSong,
+          queue: saved.queue || [saved.currentSong],
+          originalQueue: saved.originalQueue || saved.queue || [saved.currentSong],
+          queueIndex: typeof saved.queueIndex === 'number' ? saved.queueIndex : 0,
+          currentTime: typeof saved.currentTime === 'number' ? saved.currentTime : 0,
+          isPlaying: false,
+          volume: typeof saved.volume === 'number' ? saved.volume : 1,
+          isMuted: !!saved.isMuted,
+          repeatMode: saved.repeatMode || 'off',
+          shuffleMode: saved.shuffleMode || 'off',
+          sourceName: saved.sourceName || null,
+        });
+
+        setTimeout(() => {
+          const items = [saved.currentSong, ...(saved.queue || [])];
+          useStreamingStore.getState().prefetchPlaylist(items);
+        }, 500);
+      }
+    } catch (err) {
+      console.error('Failed to load saved player state:', err);
+    }
+  },
 }));
+
+let saveTimer: any = null;
+const savePlayerStateToStorage = (state: PlayerState) => {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      if (!state.currentSong) return;
+      const data = {
+        currentSong: state.currentSong,
+        queue: state.queue,
+        originalQueue: state.originalQueue,
+        queueIndex: state.queueIndex,
+        currentTime: Math.floor(state.currentTime),
+        isPlaying: state.isPlaying,
+        volume: state.volume,
+        isMuted: state.isMuted,
+        repeatMode: state.repeatMode,
+        shuffleMode: state.shuffleMode,
+        sourceName: state.sourceName,
+      };
+      localStorage.setItem('localspo_saved_player_state', JSON.stringify(data));
+      await platformService.data.write('playerState.json', data);
+    } catch {}
+  }, 1000);
+};
+
+usePlayerStore.subscribe((state) => {
+  savePlayerStateToStorage(state);
+});
+

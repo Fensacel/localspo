@@ -12,10 +12,14 @@ import {
   X,
   ToggleLeft,
   ToggleRight,
+  Radio,
 } from 'lucide-react';
 import { useSpotifyStore } from '../stores/useSpotifyStore';
 import { useDownloaderStore } from '../stores/useDownloaderStore';
+import { useLibraryStore, usePlaylistStore, useToastStore } from '@/stores';
+import { createStreamSong } from '@/types/music';
 import type { SpotifyLinkedPlaylist, SyncInterval } from '../types';
+
 
 const SYNC_INTERVALS: { value: SyncInterval; label: string }[] = [
   { value: 0, label: 'On Startup' },
@@ -185,6 +189,52 @@ export function SpotifyPlaylistsTab() {
                       ))}
                     </select>
 
+                    {/* Stream Playlist button */}
+                    <button
+                      onClick={async () => {
+                        try {
+                          useToastStore.getState().showToast(`Fetching tracks for "${playlist.name}"...`, 'info');
+                          const meta = await window.electronAPI.spotify.fetchPlaylistMeta(`https://open.spotify.com/playlist/${playlist.spotifyId}`);
+                          if (meta && Array.isArray(meta.tracks) && meta.tracks.length > 0) {
+                            const streamSongs = meta.tracks.map((t: any) =>
+                              createStreamSong({
+                                id: `stream_${t.spotifyId || Math.random().toString(36).slice(2, 9)}`,
+                                title: t.title,
+                                artist: t.artist,
+                                album: t.album || playlist.name,
+                                duration: t.durationMs ? Math.round(t.durationMs / 1000) : 180,
+                                coverUrl: t.coverUrl || playlist.coverUrl || undefined,
+                                ytVideoId: t.spotifyId || undefined,
+                              })
+                            );
+
+                            const libStore = useLibraryStore.getState();
+                            streamSongs.forEach((s: any) => libStore.addStreamSong(s));
+
+                            const plStore = usePlaylistStore.getState();
+                            const newPl = await plStore.createPlaylist(
+                              playlist.name,
+                              `Imported Spotify Playlist (${streamSongs.length} tracks)`,
+                              playlist.coverUrl || meta.coverUrl
+                            );
+                            await plStore.addSongsToPlaylist(newPl.id, streamSongs.map((s: any) => s));
+                            useToastStore.getState().showToast(`Created streaming playlist "${playlist.name}" (${streamSongs.length} songs)!`, 'success');
+                          } else {
+                            useToastStore.getState().showToast('Could not fetch Spotify tracks for streaming playlist', 'error');
+                          }
+                        } catch (err: any) {
+                          console.error('Error importing streaming playlist:', err);
+                          useToastStore.getState().showToast('Failed to create streaming playlist', 'error');
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/20 rounded-lg text-[10px] font-semibold text-sky-400 transition-all"
+                      title="Import as Streaming Playlist (Play without downloading)"
+                    >
+                      <Radio size={11} />
+                      Stream Playlist
+                    </button>
+
+
                     {/* Sync button */}
                     <button
                       onClick={() => handleSync(playlist)}
@@ -192,8 +242,9 @@ export function SpotifyPlaylistsTab() {
                       className="flex items-center gap-1 px-2.5 py-1.5 glass rounded-lg text-[10px] font-semibold text-text/70 hover:text-text hover:bg-white/10 transition-all disabled:opacity-50"
                     >
                       <RefreshCw size={11} className={isSyncing ? 'animate-spin' : ''} />
-                      Sync
+                      Download Sync
                     </button>
+
 
                     {/* Open on Spotify */}
                     <a

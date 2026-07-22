@@ -30,23 +30,33 @@ export function LyricsPanel() {
       setLyrics(null);
 
       try {
-        const result = await window.electronAPI.lyrics.read(
-          currentSong.id,
-          currentSong.path,
-          currentSong.lrcPath,
-          currentSong.hasEmbeddedLyrics,
-          currentSong.artist,
-          currentSong.title,
-          currentSong.album,
-          currentSong.duration,
+        const timeoutPromise = new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 15000)
         );
+
+        const result = await Promise.race([
+          window.electronAPI.lyrics.read(
+            currentSong.id,
+            currentSong.path,
+            currentSong.lrcPath,
+            currentSong.hasEmbeddedLyrics,
+            currentSong.artist,
+            currentSong.title,
+            currentSong.album,
+            currentSong.duration
+          ),
+          timeoutPromise,
+        ]);
 
         if (cancelled) return;
 
-        if (result) {
-          const parsed = parseLyrics(result.content);
-          const processed = await RomanizationService.processLyrics(parsed, currentSong.id);
-          if (!cancelled) setLyrics(processed);
+        if (result && result.content) {
+          const parsed = parseLyrics(result.content, currentSong.artist);
+          setLyrics(parsed);
+          RomanizationService.clearCache(currentSong.id);
+          RomanizationService.processLyrics(parsed, currentSong.id, true).then((processed) => {
+            if (!cancelled && processed) setLyrics(processed);
+          });
         } else {
           setLyrics(null);
         }
@@ -56,6 +66,7 @@ export function LyricsPanel() {
         if (!cancelled) setIsLoading(false);
       }
     };
+
 
     loadLyrics();
 

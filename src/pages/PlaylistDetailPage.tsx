@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePlaylistStore, useLibraryStore, usePlayerStore, useFavoritesStore } from '@/stores';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Trash2, Music, ListMusic, Heart, List, Check, Camera, X, ChevronLeft } from 'lucide-react';
-import { formatTime } from '@/utils';
+import { Play, Pause, Trash2, Music, ListMusic, Heart, List, Check, Camera, X, ChevronLeft, RefreshCw } from 'lucide-react';
+import { formatTime, getImageUrl } from '@/utils';
+import { createStreamSong } from '@/types/music';
 import type { Song } from '@/types';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { SongContextMenu } from '@/components/SongContextMenu';
@@ -102,29 +103,61 @@ export function PlaylistDetailPage() {
 
   const totalDuration = useMemo(() => songs.reduce((acc, s) => acc + s.duration, 0), [songs]);
 
-  const [recommendationSeed, setRecommendationSeed] = useState(0);
+  const [recommendedSongsList, setRecommendedSongsList] = useState<Song[]>([]);
+  const [isLoadingRecs, setIsLoadingRecs] = useState(false);
 
-  const recommendedSongs = useMemo(() => {
-    const allSongs = useLibraryStore.getState().songs;
-    if (allSongs.length === 0) return [];
+  const fetchRecommendations = useCallback(async () => {
+    setIsLoadingRecs(true);
+    try {
+      const existingIds = new Set(playlist?.songIds ?? []);
+      const recSongs: Song[] = [];
 
-    const existingIds = new Set(playlist?.songIds ?? []);
-    const availableSongs = allSongs.filter((s) => !existingIds.has(s.id));
-    if (availableSongs.length === 0) return [];
+      // 1. Seed query from playlist artists or fallback to trending
+      const playlistArtists = Array.from(new Set(songs.map((s) => s.artist).filter(Boolean)));
+      const query = playlistArtists.length > 0 ? playlistArtists[Math.floor(Math.random() * playlistArtists.length)] : 'Trending Hits';
 
-    const currentGenres = new Set(songs.map((s) => s.genre).filter(Boolean));
-    const currentArtists = new Set(songs.map((s) => s.artist).filter(Boolean));
+      const res = await window.electronAPI.spotify.search(query, ['track']);
+      if (res && Array.isArray(res.tracks)) {
+        for (const t of res.tracks) {
+          if (!t.ytVideoId) continue;
+          const streamId = `stream_${t.ytVideoId}`;
+          if (existingIds.has(streamId)) continue;
 
-    const scored = availableSongs.map((song) => {
-      let score = Math.random();
-      if (currentGenres.has(song.genre)) score += 3;
-      if (currentArtists.has(song.artist)) score += 2;
-      return { song, score };
-    });
+          const s = createStreamSong({
+            id: streamId,
+            title: t.title,
+            artist: t.artist,
+            album: t.album || 'Single',
+            duration: t.durationMs ? t.durationMs / 1000 : 180,
+            coverUrl: t.coverUrl || `https://i.ytimg.com/vi/${t.ytVideoId}/hqdefault.jpg`,
+            ytVideoId: t.ytVideoId,
+          });
+          recSongs.push(s);
+        }
+      }
 
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 5).map((x) => x.song);
-  }, [playlist, songs, recommendationSeed]);
+      // 2. Fallback to local library + streamSongsMap
+      const allLocal = useLibraryStore.getState().songs;
+      const streamMap = useLibraryStore.getState().streamSongsMap;
+      const allAvailable = [...allLocal, ...Object.values(streamMap)].filter((s) => !existingIds.has(s.id));
+
+      for (const s of allAvailable) {
+        if (!recSongs.some((r) => r.id === s.id)) {
+          recSongs.push(s);
+        }
+      }
+
+      setRecommendedSongsList(recSongs.slice(0, 5));
+    } catch (err) {
+      console.error('Failed to load recommendations:', err);
+    } finally {
+      setIsLoadingRecs(false);
+    }
+  }, [playlist?.id, songs]);
+
+  useEffect(() => {
+    fetchRecommendations();
+  }, [fetchRecommendations]);
 
   const handlePlayAll = useCallback(() => {
     if (sortedSongs.length > 0 && playlist) setQueue(sortedSongs, 0, playlist.name);
@@ -193,8 +226,12 @@ export function PlaylistDetailPage() {
   }
 
   const coverSrc = playlist.coverPath
-    ? `local-image://${encodeURIComponent(playlist.coverPath)}`
-    : null;
+    ? getImageUrl(playlist.coverPath)
+    : (songs.length > 0
+        ? (songs[0].coverPath
+            ? getImageUrl(songs[0].coverPath)
+            : (songs[0] as any).remoteCoverUrl || (songs[0] as any).coverUrl || null)
+        : null);
 
   return (
     <div>
@@ -445,8 +482,8 @@ export function PlaylistDetailPage() {
           {sortedSongs.map((song, index) => {
             const isCurrent = currentSong?.id === song.id;
             const songCover = song.coverPath
-              ? `local-image://${encodeURIComponent(song.coverPath)}`
-              : null;
+              ? getImageUrl(song.coverPath)
+              : (song as any).coverUrl || (song as any).remoteCoverUrl || null;
 
             return (
               <motion.div
@@ -478,21 +515,15 @@ export function PlaylistDetailPage() {
                       ))}
                     </div>
                   ) : (
-                    <span
-                      className={`text-sm tabular-nums group-hover:hidden ${isCurrent ? 'text-primary' : 'text-text/25'}`}
-                    >
+                    <span className="text-sm font-semibold tabular-nums text-text/30 group-hover:hidden">
                       {index + 1}
                     </span>
                   )}
                   <button
                     onClick={() => handlePlaySong(song)}
-                    className="hidden group-hover:flex text-text/80"
+                    className="hidden group-hover:flex items-center justify-center text-text"
                   >
-                    {isCurrent && isPlaying ? (
-                      <Pause size={14} fill="currentColor" className="text-primary" />
-                    ) : (
-                      <Play size={14} fill="currentColor" />
-                    )}
+                    {isCurrent && isPlaying ? <Pause size={14} /> : <Play size={14} fill="currentColor" />}
                   </button>
                 </div>
 
@@ -501,38 +532,40 @@ export function PlaylistDetailPage() {
                     <img
                       src={songCover}
                       alt=""
-                      className="w-8 h-8 rounded-lg object-cover shrink-0"
+                      className="w-10 h-10 rounded-lg object-cover shrink-0"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = '/default-cover.png';
                       }}
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-lg glass flex items-center justify-center shrink-0">
-                      <Music size={12} className="text-text/25" />
+                    <div className="w-10 h-10 rounded-lg glass flex items-center justify-center shrink-0">
+                      <Music size={16} className="text-text/25" />
                     </div>
                   )}
                   <div className="min-w-0">
                     <p
-                      className={`text-sm font-medium truncate ${isCurrent ? 'text-primary' : ''}`}
+                      className={`text-sm font-medium truncate ${
+                        isCurrent ? 'text-primary' : 'text-text'
+                      }`}
                     >
                       {song.title}
                     </p>
-                    <p className="text-xs text-text/35 truncate">{song.artist}</p>
+                    <p className="text-xs text-text/40 truncate">{song.artist}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center">
-                  <p className="text-sm text-text/40 truncate">{song.album}</p>
+                <div className="flex items-center min-w-0">
+                  <p className="text-xs text-text/40 truncate">{song.album}</p>
                 </div>
 
-                {/* Favorite toggler */}
+                {/* Favorite song */}
                 <div className="flex items-center justify-center">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleFavoriteSong(song.id);
                     }}
-                    className={`hover:scale-110 transition-transform ${
+                    className={`transition-colors p-1 ${
                       isFavoriteSong(song.id)
                         ? 'text-primary'
                         : 'text-text/20 hover:text-text/50 opacity-0 group-hover:opacity-100'
@@ -583,19 +616,26 @@ export function PlaylistDetailPage() {
             <p className="text-xs text-text/30">Based on what's in this playlist</p>
           </div>
           <button
-            onClick={() => setRecommendationSeed((prev) => prev + 1)}
-            className="px-3 py-1.5 rounded-lg glass text-xs font-semibold text-text/50 hover:text-text hover:bg-white/5 transition-all"
+            onClick={fetchRecommendations}
+            disabled={isLoadingRecs}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass text-xs font-semibold text-text/50 hover:text-text hover:bg-white/5 transition-all"
           >
+            <RefreshCw size={12} className={isLoadingRecs ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
 
-        {recommendedSongs.length > 0 ? (
+        {isLoadingRecs ? (
+          <div className="flex items-center justify-center py-8 text-xs text-text/40 gap-2">
+            <RefreshCw size={14} className="animate-spin text-primary" />
+            Finding recommendations...
+          </div>
+        ) : recommendedSongsList.length > 0 ? (
           <div className="space-y-1">
-            {recommendedSongs.map((song) => {
+            {recommendedSongsList.map((song) => {
               const songCover = song.coverPath
-                ? `local-image://${encodeURIComponent(song.coverPath)}`
-                : null;
+                ? getImageUrl(song.coverPath)
+                : (song as any).coverUrl || (song as any).remoteCoverUrl || null;
               return (
                 <div
                   key={song.id}
@@ -627,7 +667,7 @@ export function PlaylistDetailPage() {
                       {song.album}
                     </span>
                     <button
-                      onClick={() => addSongToPlaylist(playlist.id, song.id)}
+                      onClick={() => addSongToPlaylist(playlist.id, song)}
                       className="px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/30 text-xs font-bold text-text hover:bg-white/5 transition-all shrink-0"
                     >
                       Add

@@ -53,11 +53,10 @@ export function normalizeImageUrl(url?: string | null): string | null {
   if (clean.startsWith('//')) {
     clean = 'https:' + clean;
   }
-  if (clean.includes('googleusercontent.com') || clean.includes('ggpht.com')) {
-    clean = clean.replace(/=w\d+-h\d+[^$]*/, '=w500-h500-l90-rj').replace(/=s\d+[^$]*/, '=s500');
-  }
   return clean;
 }
+
+
 
 export function cleanMusicMetadata(input: {
   title: string;

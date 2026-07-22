@@ -7,6 +7,9 @@ import type {
   SyncProgress,
 } from '../types';
 import { useToastStore } from '@/stores/useToastStore';
+import { useStreamingStore } from '@/stores/useStreamingStore';
+import { useLibraryStore } from '@/stores/useLibraryStore';
+import { createStreamSong } from '@/types/music';
 
 interface SpotifyState {
   // Search
@@ -85,6 +88,18 @@ export const useSpotifyStore = create<SpotifyState>((set, get) => ({
                 : ['track', 'album', 'artist', 'playlist'];
 
       const results = await window.electronAPI.spotify.search(q, types);
+
+      // Save user search query to localStorage for dynamic homepage Quick Picks
+      try {
+        const clean = q.trim();
+        if (clean && clean.length >= 2) {
+          const raw = localStorage.getItem('localspo_user_searches');
+          const existing: string[] = raw ? JSON.parse(raw) : [];
+          const updated = [clean, ...existing.filter((item) => item.toLowerCase() !== clean.toLowerCase())].slice(0, 30);
+          localStorage.setItem('localspo_user_searches', JSON.stringify(updated));
+        }
+      } catch {}
+
       set({
         searchResults: {
           tracks: results.tracks || [],
@@ -94,6 +109,27 @@ export const useSpotifyStore = create<SpotifyState>((set, get) => ({
         },
         isSearching: false,
       });
+
+      // Background pre-stream top 5 search result tracks for instant play
+      if (results.tracks && results.tracks.length > 0) {
+        const streamingStore = useStreamingStore.getState();
+        const libraryStore = useLibraryStore.getState();
+        const songsToPrestream = results.tracks.slice(0, 5).map((t: any) => {
+          const s = createStreamSong({
+            id: `stream_${t.ytVideoId || t.id || t.spotifyId}`,
+            title: t.title || t.name,
+            artist: t.artist || t.artists?.[0]?.name || 'Unknown',
+            album: t.album?.name || t.album || '',
+            duration: (t.durationMs || t.duration_ms || 180000) / 1000,
+            coverUrl: t.coverUrl || t.album?.images?.[0]?.url,
+            ytVideoId: t.ytVideoId || undefined,
+          });
+          libraryStore.addStreamSong(s);
+          return s;
+        });
+        streamingStore.prefetchPlaylist(songsToPrestream);
+      }
+
     } catch (err: any) {
       console.error('Spotify search failed:', err);
       useToastStore.getState().showToast(`Search failed: ${err?.message || 'Unknown error'}`, 'error');

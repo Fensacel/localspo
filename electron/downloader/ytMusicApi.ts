@@ -9,8 +9,10 @@ export interface YTSearchResult {
 
 export class YTMusicApi {
   public static buildSearchQuery(artist: string, title: string, album?: string): string {
-    const cleanArtist = artist.replace(/ feat\..*$/i, '').replace(/ ft\..*$/i, '').trim();
-    const cleanTitle = title.trim();
+    const cleanArtist = (artist || '').replace(/ feat\..*$/i, '').replace(/ ft\..*$/i, '').trim();
+    const cleanTitle = (title || '').trim();
+    if (!cleanArtist) return cleanTitle;
+    if (!cleanTitle) return cleanArtist;
     if (album && album.toLowerCase() !== title.toLowerCase()) {
       return `${cleanArtist} - ${cleanTitle} ${album}`;
     }
@@ -106,11 +108,13 @@ export class YTMusicApi {
           const titleRun = itemData?.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || '';
           const artistRun = itemData?.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || '';
 
-          const videoId =
+          const rawVideoId =
             itemData?.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId ||
             itemData?.navigationEndpoint?.watchEndpoint?.videoId;
 
-          if (!videoId || !titleRun || typeof videoId !== 'string') continue;
+          if (!rawVideoId || !titleRun || typeof rawVideoId !== 'string') continue;
+          const videoId = String(rawVideoId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 11);
+          if (videoId.length !== 11) continue;
 
           const normCandTitle = (titleRun as string).toLowerCase().trim();
           const normCandArtist = (artistRun as string).toLowerCase().trim();
@@ -141,6 +145,34 @@ export class YTMusicApi {
           // Artist match bonus
           if (normCandArtist && (normCandArtist.includes(normReqArtist) || normReqArtist.includes(normCandArtist))) {
             score += 40;
+          }
+
+          // Version Modifier Matching (Sped Up, Slowed, Remix, Instrumental, Nightcore, etc.)
+          const modifierKeywords = [
+            'sped up',
+            'speed up',
+            'speedup',
+            'slowed',
+            'reverb',
+            'nightcore',
+            'remix',
+            'instrumental',
+            'karaoke',
+            'acoustic',
+            'live',
+          ];
+
+          for (const kw of modifierKeywords) {
+            const reqHasKw = normReqTitle.includes(kw);
+            const candHasKw = normCandTitle.includes(kw);
+
+            if (reqHasKw && candHasKw) {
+              score += 80;
+            } else if (reqHasKw && !candHasKw) {
+              score -= 100; // Strong penalty if candidate is missing requested modifier (e.g. Sped Up)
+            } else if (!reqHasKw && candHasKw) {
+              score -= 60; // Penalty if candidate has a modifier when normal version requested
+            }
           }
 
           candidates.push({ videoId: videoId as string, title: titleRun as string, artist: artistRun as string, score });
@@ -300,7 +332,8 @@ export class YTMusicApi {
           data.navigationEndpoint?.watchEndpoint?.videoId;
 
         if (videoId && !coverUrl) {
-          coverUrl = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+          coverUrl = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+
         }
         coverUrl = normalizeImageUrl(coverUrl);
 
@@ -340,6 +373,7 @@ export class YTMusicApi {
             coverUrl,
             durationMs: 0,
             spotifyUrl: `https://www.youtube.com/watch?v=${videoId}`,
+            ytVideoId: videoId,
           });
         } else if (browseId && (shelfTitle.includes('album') || browseId.startsWith('MPRE'))) {
           const rawArtist = secondColRuns[2]?.text || secondColRuns[0]?.text || 'YouTube Artist';

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search,
   ListMusic,
   History,
   ListCheck,
@@ -10,7 +9,7 @@ import {
   Download,
   RefreshCw,
 } from 'lucide-react';
-import { SpotifySearchTab } from '../components/SpotifySearchTab';
+
 import { QueueTab } from '../components/QueueTab';
 import { HistoryTab } from '../components/HistoryTab';
 import { SpotifyPlaylistsTab } from '../components/SpotifyPlaylistsTab';
@@ -19,10 +18,9 @@ import { DownloaderSettingsTab } from '../components/DownloaderSettingsTab';
 import { useDownloaderStore } from '../stores/useDownloaderStore';
 import { useSpotifyStore } from '../stores/useSpotifyStore';
 
-type Tab = 'search' | 'queue' | 'history' | 'playlists' | 'liked' | 'settings';
+type Tab = 'queue' | 'history' | 'playlists' | 'liked' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: 'search', label: 'Search', icon: Search },
   { id: 'queue', label: 'Queue', icon: ListCheck },
   { id: 'history', label: 'History', icon: History },
   { id: 'playlists', label: 'Playlists', icon: ListMusic },
@@ -31,7 +29,8 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 export function DownloadsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('search');
+  const [activeTab, setActiveTab] = useState<Tab>('queue');
+
   const { queue, loadQueue, loadSettings, settings } = useDownloaderStore();
   const { loadLinkedPlaylists, linkedPlaylists, syncPlaylist } = useSpotifyStore();
 
@@ -130,7 +129,6 @@ export function DownloadsPage() {
           transition={{ duration: 0.15 }}
           className="flex-1 min-h-0"
         >
-          {activeTab === 'search' && <SpotifySearchTab />}
           {activeTab === 'queue' && <QueueTab />}
           {activeTab === 'history' && <HistoryTab />}
           {activeTab === 'playlists' && <SpotifyPlaylistsTab />}
@@ -141,3 +139,4 @@ export function DownloadsPage() {
     </div>
   );
 }
+

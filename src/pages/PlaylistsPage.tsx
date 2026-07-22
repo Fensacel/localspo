@@ -1,14 +1,17 @@
 import { usePlaylistStore, useLibraryStore } from '@/stores';
-import { ListMusic, Plus, Pin, Heart, Trash2, Camera } from 'lucide-react';
+import { ListMusic, Plus, Pin, Heart, Trash2, Camera, Radio } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ImportPlaylistModal } from '@/components/ImportPlaylistModal';
+import { getImageUrl } from '@/utils';
 
 export function PlaylistsPage() {
   const { playlists, createPlaylist, deletePlaylist, togglePinPlaylist, toggleFavoritePlaylist } =
     usePlaylistStore();
   const { getSongById } = useLibraryStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [playlistToDelete, setPlaylistToDelete] = useState<string | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
@@ -58,22 +61,33 @@ export function PlaylistsPage() {
             {playlists.length} playlist{playlists.length !== 1 ? 's' : ''} created
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
-        >
-          <Plus size={16} />
-          New Playlist
-        </motion.button>
+        <div className="flex items-center gap-3">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 rounded-button text-sm font-semibold text-sky-400 transition-all shadow-sm"
+          >
+            <Radio size={16} />
+            Import Spotify Playlist
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
+          >
+            <Plus size={16} />
+            New Playlist
+          </motion.button>
+        </div>
       </div>
 
       {sortedPlaylists.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
           {sortedPlaylists.map((playlist) => {
             const coverSrc = playlist.coverPath
-              ? `local-image://${encodeURIComponent(playlist.coverPath)}`
+              ? getImageUrl(playlist.coverPath)
               : null;
             const validSongCount = playlist.songIds.filter((sid) => !!getSongById(sid)).length;
 
@@ -284,6 +298,10 @@ export function PlaylistsPage() {
           </div>
         )}
       </AnimatePresence>
+      <ImportPlaylistModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+      />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import type { Playlist } from '@/types';
+import type { Playlist, Song } from '@/types';
 import { platformService } from '@/platform';
+import { useLibraryStore } from './useLibraryStore';
+import { useStreamingStore } from './useStreamingStore';
 
 interface PlaylistState {
   playlists: Playlist[];
@@ -12,8 +14,8 @@ interface PlaylistState {
     id: string,
     partial: Partial<Omit<Playlist, 'id' | 'createdAt'>>,
   ) => Promise<void>;
-  addSongToPlaylist: (playlistId: string, songId: string) => Promise<void>;
-  addSongsToPlaylist: (playlistId: string, songIds: string[]) => Promise<void>;
+  addSongToPlaylist: (playlistId: string, songOrId: string | Song) => Promise<void>;
+  addSongsToPlaylist: (playlistId: string, songsOrIds: (string | Song)[]) => Promise<void>;
   removeSongFromPlaylist: (playlistId: string, songId: string) => Promise<void>;
   togglePinPlaylist: (id: string) => Promise<void>;
   toggleFavoritePlaylist: (id: string) => Promise<void>;
@@ -30,6 +32,26 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       } | null;
       if (data && Array.isArray(data.playlists)) {
         set({ playlists: data.playlists, isLoaded: true });
+
+        // Pre-stream playlist songs in background on launch
+        setTimeout(() => {
+          const allSongs = useLibraryStore.getState().songs;
+          const streamingStore = useStreamingStore.getState();
+          const songsToPrestream: Song[] = [];
+
+          data.playlists.forEach((pl) => {
+            pl.songIds.forEach((sId) => {
+              const found = allSongs.find((s) => s.id === sId);
+              if (found && !found.path) {
+                songsToPrestream.push(found);
+              }
+            });
+          });
+
+          if (songsToPrestream.length > 0) {
+            streamingStore.prefetchPlaylist(songsToPrestream);
+          }
+        }, 1200);
       } else {
         set({ playlists: [], isLoaded: true });
       }
@@ -82,12 +104,23 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     await platformService.data.write('playlist.json', { playlists: updatedPlaylists });
   },
 
-  addSongToPlaylist: async (playlistId, songId) => {
-    return get().addSongsToPlaylist(playlistId, [songId]);
+  addSongToPlaylist: async (playlistId, songOrId) => {
+    return get().addSongsToPlaylist(playlistId, [songOrId]);
   },
 
-  addSongsToPlaylist: async (playlistId, newSongIds) => {
+  addSongsToPlaylist: async (playlistId, songsOrIds) => {
     try {
+      const newSongIds: string[] = [];
+      const libraryStore = useLibraryStore.getState();
+
+      for (const item of songsOrIds) {
+        if (typeof item === 'string') {
+          newSongIds.push(item);
+        } else if (item && item.id) {
+          newSongIds.push(item.id);
+          libraryStore.addStreamSong(item);
+        }
+      }
       const { playlists } = get();
       const updatedPlaylists = playlists.map((p) => {
         if (p.id === playlistId) {
@@ -214,6 +247,5 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   },
 }));
 
-// Import useLibraryStore inside the file to access song cover metadata
-import { useLibraryStore } from './useLibraryStore';
+// Import useToastStore inside the file to access toast notifications
 import { useToastStore } from './useToastStore';

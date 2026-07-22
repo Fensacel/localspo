@@ -1,448 +1,443 @@
+import { useState, useEffect } from 'react';
 import { useLibraryStore, usePlayerStore, usePlaylistStore } from '@/stores';
-import { motion } from 'framer-motion';
-import { Play, Disc3, Music, ListMusic } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import type { Song, Album, Playlist } from '@/types';
-import { getImageUrl } from '@/utils';
-import { useState } from 'react';
+import { Play, Music, ListMusic, ListPlus, Radio, Heart, Sparkles, RefreshCw, Plus, Clock } from 'lucide-react';
 import { SongContextMenu } from '@/components/SongContextMenu';
-import { EditSongModal } from '@/components/EditSongModal';
-import { SongDetailsModal } from '@/components/SongDetailsModal';
+import { ImportPlaylistModal } from '@/components/ImportPlaylistModal';
+import type { Song } from '@/types';
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.07 },
-  },
-};
+import { useNavigate } from 'react-router-dom';
+import { getImageUrl } from '@/utils';
+import { createStreamSong } from '@/types/music';
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 18 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-};
+interface FeaturedTrack {
+  ytVideoId: string;
+  title: string;
+  artist: string;
+  album: string;
+  coverUrl: string;
+}
 
 export function HomePage() {
-  const { songs, albums, artists } = useLibraryStore();
+  const { songs } = useLibraryStore();
   const { playlists } = usePlaylistStore();
-  const { setQueue, currentSong, isPlaying, setIsPlaying } = usePlayerStore();
+  const { setQueue } = usePlayerStore();
   const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState<'all' | 'music' | 'stream' | 'local'>('all');
+  const [featuredTracks, setFeaturedTracks] = useState<FeaturedTrack[]>([]);
+  const [isLoadingFeatured, setIsLoadingFeatured] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
-  const [editingSong, setEditingSong] = useState<Song | null>(null);
-  const [viewingDetailsSong, setViewingDetailsSong] = useState<Song | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
-  const allRecentlyAdded = [...songs].sort((a, b) => b.addedAt - a.addedAt);
-  const recentlyAdded = allRecentlyAdded.slice(0, 10);
-  const topAlbums = albums.slice(0, 10);
-  const topArtists = artists.slice(0, 10);
+  // Load live online streaming tracks from YouTube Music based on actual user search history
+  useEffect(() => {
+    let cancelled = false;
 
-  const handlePlaySong = (song: Song) => {
-    if (currentSong?.id === song.id) {
-      setIsPlaying(!isPlaying);
-      window.dispatchEvent(new CustomEvent('player:toggle'));
-    } else {
-      const idx = allRecentlyAdded.findIndex((s) => s.id === song.id);
-      setQueue(allRecentlyAdded, idx >= 0 ? idx : 0, 'Recently Added');
-    }
+    const fetchFeatured = async () => {
+      setIsLoadingFeatured(true);
+      try {
+        let searchQuery = 'Trending Hits';
+        try {
+          const raw = localStorage.getItem('localspo_user_searches');
+          if (raw) {
+            const userSearches: string[] = JSON.parse(raw);
+            if (Array.isArray(userSearches) && userSearches.length > 0) {
+              searchQuery = userSearches[Math.floor(Math.random() * userSearches.length)];
+            }
+          }
+        } catch {}
+
+        const res = await window.electronAPI.spotify.search(searchQuery, ['track']);
+        if (cancelled) return;
+
+        if (res && Array.isArray(res.tracks) && res.tracks.length > 0) {
+          const validTracks: FeaturedTrack[] = res.tracks
+            .filter((t: any) => t.ytVideoId)
+            .map((t: any) => ({
+              ytVideoId: t.ytVideoId,
+              title: t.title,
+              artist: t.artist,
+              album: t.album || 'Single',
+              coverUrl: t.coverUrl || `https://i.ytimg.com/vi/${t.ytVideoId}/hqdefault.jpg`,
+            }));
+          setFeaturedTracks(validTracks.slice(0, 16));
+        }
+      } catch (err) {
+        console.error('Failed to load online streaming tracks:', err);
+      } finally {
+        if (!cancelled) setIsLoadingFeatured(false);
+      }
+    };
+
+    fetchFeatured();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handlePlayStreamTrack = (track: FeaturedTrack) => {
+    if (!track.ytVideoId) return;
+
+    const allStreamSongs = featuredTracks.map((t) => {
+      const s = createStreamSong({
+        id: `stream_${t.ytVideoId}`,
+        title: t.title,
+        artist: t.artist,
+        album: t.album,
+        duration: 180,
+        coverUrl: t.coverUrl,
+        ytVideoId: t.ytVideoId,
+      });
+      useLibraryStore.getState().addStreamSong(s);
+      return s;
+    });
+
+    const index = featuredTracks.findIndex((t) => t.ytVideoId === track.ytVideoId);
+    setQueue(allStreamSongs, index >= 0 ? index : 0, 'Featured Streaming');
+    usePlayerStore.getState().setIsPlaying(true);
+    window.dispatchEvent(new CustomEvent('player:play'));
   };
 
-  const handlePlayAlbum = (album: Album) => {
-    const albumSongs = useLibraryStore.getState().getAlbumSongs(album.id);
-    if (albumSongs.length > 0) setQueue(albumSongs, 0, album.name);
+  const handleAddToQueueStreamTrack = (track: FeaturedTrack, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!track.ytVideoId) return;
+    const streamSong = createStreamSong({
+      id: `stream_${track.ytVideoId}`,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      duration: 180,
+      coverUrl: track.coverUrl,
+      ytVideoId: track.ytVideoId,
+    });
+    useLibraryStore.getState().addStreamSong(streamSong);
+    usePlayerStore.getState().addToQueue(streamSong);
   };
 
-  const handlePlayPlaylist = (playlist: Playlist) => {
-    const playlistSongs = playlist.songIds
-      .map((id) => useLibraryStore.getState().getSongById(id))
-      .filter((s): s is Song => s !== undefined);
-    if (playlistSongs.length > 0) setQueue(playlistSongs, 0, playlist.name);
-  };
+  // Top 8 Grid Items for Spotify Header
+  const topGridItems: Array<{
+    title: string;
+    subtitle: string;
+    cover: string | null;
+    icon: any;
+    bg: string;
+    noPlay?: boolean;
+    action: () => void;
+  }> = [
+    {
+      title: 'Liked Songs',
+      subtitle: 'Playlist',
+      cover: null,
+      icon: Heart,
+      bg: 'from-purple-700 to-indigo-900',
+      action: () => navigate('/favorites'),
+    },
+    {
+      title: 'Local Files',
+      subtitle: `Folder • ${songs.length} tracks`,
+      cover: null,
+      icon: ListMusic,
+      bg: 'from-emerald-700 to-teal-900',
+      action: () => navigate('/songs'),
+    },
+    {
+      title: 'Recently Played',
+      subtitle: 'Listening History',
+      cover: null,
+      icon: Clock,
+      bg: 'from-blue-600 to-indigo-900',
+      action: () => navigate('/history'),
+    },
+    {
+      title: 'Import Playlist',
+      subtitle: 'From Spotify',
+      cover: null,
+      icon: Plus,
+      bg: 'from-sky-500 to-indigo-600',
+      noPlay: true,
+      action: () => setShowImportModal(true),
+    },
+    ...playlists.map((p) => ({
+      title: p.name,
+      subtitle: `Playlist • ${p.songIds.length} tracks`,
+      cover: p.coverPath ? getImageUrl(p.coverPath) : null,
+      icon: ListMusic,
+      bg: 'bg-[#282828]',
+      action: () => navigate(`/playlists/${p.id}`),
+    })),
+  ].slice(0, 8);
 
-  if (songs.length === 0) {
-    return <EmptyLibrary />;
-  }
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-10 pb-4"
-    >
-      {/* Hero — Now Playing banner */}
-      {currentSong && (
-        <motion.div variants={itemVariants}>
-          <HeroSection song={currentSong} />
-        </motion.div>
-      )}
+    <div className="space-y-8 pb-10 select-none">
+      {/* Top Filter Chips */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              activeTab === 'all' ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/15'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setActiveTab('music')}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              activeTab === 'music' ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/15'
+            }`}
+          >
+            Music
+          </button>
+          <button
+            onClick={() => setActiveTab('stream')}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'stream' ? 'bg-sky-400 text-black font-extrabold' : 'bg-sky-500/15 text-sky-400 hover:bg-sky-500/25'
+            }`}
+          >
+            <Radio size={13} /> Online Streaming
+          </button>
+          <button
+            onClick={() => setActiveTab('local')}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+              activeTab === 'local' ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/15'
+            }`}
+          >
+            Local Files ({songs.length})
+          </button>
+        </div>
 
-      {/* Your Playlists (Quick Picks replacement) */}
-      {playlists.length > 0 && (
-        <motion.div variants={itemVariants}>
-          <SectionHeader title="Your Playlists" onSeeAll={() => navigate('/playlists')} />
-          <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-none">
-            {playlists.map((playlist) => (
-              <PlaylistCard
-                key={playlist.id}
-                playlist={playlist}
-                onPlay={() => handlePlayPlaylist(playlist)}
-                onClick={() => navigate(`/playlists/${playlist.id}`)}
-              />
-            ))}
-          </div>
-        </motion.div>
-      )}
+        <button
+          onClick={() => setShowImportModal(true)}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 rounded-full text-xs font-extrabold text-sky-400 transition-all shadow-sm"
+        >
+          <Plus size={14} />
+          Import Spotify Playlist
+        </button>
+      </div>
 
-      {/* Recently Added */}
-      {recentlyAdded.length > 0 && (
-        <motion.div variants={itemVariants}>
-          <SectionHeader title="Recently Added" />
-          <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-none">
-            {recentlyAdded.map((song) => (
-              <SongCard
-                key={song.id}
-                song={song}
-                onPlay={() => handlePlaySong(song)}
-                isPlaying={currentSong?.id === song.id && isPlaying}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ song, x: e.clientX, y: e.clientY });
+      {/* ── Spotify Desktop 8-Grid Cards (Top Row) ────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {topGridItems.map((item, idx) => (
+          <div
+            key={idx}
+            onClick={item.action}
+            className="group relative flex items-center gap-3 bg-[#1e1e22]/70 hover:bg-[#2a2a30] transition-all rounded-lg overflow-hidden cursor-pointer p-0 h-14 pr-3 border border-white/5 shadow-sm"
+          >
+            <div className={`w-14 h-14 shrink-0 flex items-center justify-center overflow-hidden bg-gradient-to-br ${item.bg}`}>
+              {item.cover ? (
+                <img
+                  src={item.cover}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <item.icon size={22} className="text-white fill-white/20" />
+              )}
+            </div>
+            <span className="text-xs font-bold text-white truncate flex-1 leading-tight">
+              {item.title}
+            </span>
+            {!item.noPlay && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  item.action();
                 }}
-              />
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Albums */}
-      {topAlbums.length > 0 && (
-        <motion.div variants={itemVariants}>
-          <SectionHeader title="Albums" onSeeAll={() => navigate('/albums')} />
-          <div className="flex gap-4 mt-4 overflow-x-auto pb-2 scrollbar-none">
-            {topAlbums.map((album) => (
-              <AlbumCard
-                key={album.id}
-                album={album}
-                onPlay={() => handlePlayAlbum(album)}
-                onClick={() => navigate(`/albums/${album.id}`)}
-              />
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Artists */}
-      {topArtists.length > 0 && (
-        <motion.div variants={itemVariants}>
-          <SectionHeader title="Artists" onSeeAll={() => navigate('/artists')} />
-          <div className="flex gap-5 mt-4 overflow-x-auto pb-2 scrollbar-none">
-            {topArtists.map((artist) => (
-              <motion.div
-                key={artist.id}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => navigate(`/artists/${artist.id}`)}
-                className="flex flex-col items-center gap-2 cursor-pointer shrink-0"
+                className="w-9 h-9 rounded-full bg-primary text-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:scale-105 shrink-0"
               >
-                <div className="w-32 h-32 rounded-full glass flex items-center justify-center overflow-hidden ring-2 ring-white/5">
-                  {artist.coverPath ? (
-                    <img
-                      src={getImageUrl(artist.coverPath)}
-                      alt={artist.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <Music size={36} className="text-text/20" />
-                  )}
-                </div>
-                <p className="text-xs font-semibold text-center w-32 truncate">{artist.name}</p>
-                <p className="text-[10px] text-text/30">
-                  {artist.totalAlbums} album{artist.totalAlbums !== 1 ? 's' : ''}
-                </p>
-              </motion.div>
-            ))}
+                <Play size={16} className="fill-black ml-0.5" />
+              </button>
+            )}
           </div>
-        </motion.div>
+        ))}
+      </div>
+
+      {/* ── Section 1: Quick Picks (YouTube Music Style Grid) ─────────────── */}
+      {(activeTab === 'all' || activeTab === 'stream' || activeTab === 'music') && (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                <Sparkles size={20} className="text-sky-400" />
+                Quick Picks
+              </h2>
+              <p className="text-xs text-text/40 mt-0.5">Start radio with any online stream track</p>
+            </div>
+            <button
+              onClick={() => navigate('/search')}
+              className="text-xs font-bold text-text/50 hover:text-white transition-colors uppercase tracking-wider"
+            >
+              Show all
+            </button>
+          </div>
+
+          {isLoadingFeatured && featuredTracks.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-text/40 text-xs gap-2">
+              <RefreshCw size={16} className="animate-spin text-sky-400" />
+              Loading Quick Picks...
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+              {featuredTracks.slice(0, 12).map((track) => (
+                <div
+                  key={track.ytVideoId}
+                  onClick={() => handlePlayStreamTrack(track)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    const streamSong = createStreamSong({
+                      id: `stream_${track.ytVideoId}`,
+                      title: track.title,
+                      artist: track.artist,
+                      album: track.album,
+                      duration: 180,
+                      coverUrl: track.coverUrl,
+                      ytVideoId: track.ytVideoId,
+                    });
+                    setContextMenu({ song: streamSong, x: e.clientX, y: e.clientY });
+                  }}
+                  className="group flex items-center gap-3.5 p-2.5 bg-[#18181c] hover:bg-[#24242a] border border-white/5 hover:border-white/10 rounded-xl transition-all duration-200 cursor-pointer shadow-sm"
+                >
+                  {/* Compact Square Thumbnail */}
+                  <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-white/5 shadow-sm">
+                    <img
+                      src={track.coverUrl}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://i.ytimg.com/vi/${track.ytVideoId}/hqdefault.jpg`;
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlayStreamTrack(track);
+                      }}
+                      className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"
+                    >
+                      <Play size={16} className="fill-white ml-0.5" />
+                    </button>
+                  </div>
+
+                  {/* Title & Artist/Album Subtitle */}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xs font-bold text-white group-hover:text-primary transition-colors truncate leading-snug">
+                      {track.title}
+                    </h3>
+                    <p className="text-[11px] text-text/45 truncate mt-0.5">
+                      {track.artist} {track.album ? `• ${track.album}` : ''}
+                    </p>
+                  </div>
+
+                  {/* Add to Queue Button */}
+                  <div className="shrink-0 flex items-center">
+                    <button
+                      onClick={(e) => handleAddToQueueStreamTrack(track, e)}
+                      title="Add to queue"
+                      className="p-1 rounded-lg text-text/40 hover:text-sky-400 hover:bg-white/5 transition-all opacity-0 group-hover:opacity-100"
+                    >
+                      <ListPlus size={15} />
+                    </button>
+                  </div>
+
+
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
+
+
+
+
+      {/* ── Section 3: Your Local Library ──────────────────────────────────── */}
+      {(activeTab === 'all' || activeTab === 'local') && (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+              <Music size={20} className="text-emerald-400" />
+              Your Local Library ({songs.length})
+            </h2>
+            {songs.length > 0 && (
+              <button
+                onClick={() => navigate('/songs')}
+                className="text-xs font-bold text-text/50 hover:text-white transition-colors uppercase tracking-wider"
+              >
+                Show all
+              </button>
+            )}
+          </div>
+
+          {songs.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-[#121214] border border-white/5 flex flex-col items-center justify-center text-center gap-3">
+              <Music size={32} className="text-text/20" />
+              <div>
+                <p className="text-sm font-bold text-white">No local music files scanned yet</p>
+                <p className="text-xs text-text/40 mt-1">Add a music folder to scan your local MP3, FLAC, and M4A files</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const folder = await window.electronAPI.dialog.openFolder();
+                  if (folder) {
+                    window.dispatchEvent(new CustomEvent('scan-folder', { detail: folder }));
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold transition-all"
+              >
+                <Plus size={15} />
+                Add Local Music Folder
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {songs.slice(0, 12).map((song) => (
+                <div
+                  key={song.id}
+                  onClick={() => {
+                    const idx = songs.findIndex((s) => s.id === song.id);
+                    setQueue(songs, idx >= 0 ? idx : 0, 'Local Library');
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ song, x: e.clientX, y: e.clientY });
+                  }}
+                  className="group bg-[#18181c] hover:bg-[#232329] p-3 rounded-xl transition-all duration-200 cursor-pointer flex flex-col border border-white/5"
+                >
+                  <div className="relative aspect-square rounded-lg overflow-hidden mb-3 bg-white/5 flex items-center justify-center">
+                    {song.coverPath ? (
+                      <img src={getImageUrl(song.coverPath) || ''} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Music size={24} className="text-white/20" />
+                    )}
+                    <button className="absolute bottom-2 right-2 w-9 h-9 rounded-full bg-primary text-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl">
+                      <Play size={16} className="fill-black ml-0.5" />
+                    </button>
+                  </div>
+                  <h3 className="text-xs font-bold text-white truncate">{song.title}</h3>
+                  <p className="text-[11px] text-text/40 truncate mt-0.5">{song.artist}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {contextMenu && (
         <SongContextMenu
           song={contextMenu.song}
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          onEditSong={() => setEditingSong(contextMenu.song)}
-          onViewDetails={() => setViewingDetailsSong(contextMenu.song)}
         />
       )}
 
-      <EditSongModal
-        song={editingSong}
-        isOpen={!!editingSong}
-        onClose={() => setEditingSong(null)}
+      <ImportPlaylistModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
       />
-
-      <SongDetailsModal
-        song={viewingDetailsSong}
-        isOpen={!!viewingDetailsSong}
-        onClose={() => setViewingDetailsSong(null)}
-      />
-    </motion.div>
-  );
-}
-
-// ─── Sub-components ──────────────────────────────────────
-
-function EmptyLibrary() {
-  return (
-    <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-      <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-        className="w-32 h-32 glass rounded-3xl flex items-center justify-center mb-6"
-      >
-        <Music size={48} className="text-primary/50" />
-      </motion.div>
-      <h2 className="text-2xl font-bold text-text mb-2">No Music Yet</h2>
-      <p className="text-text/40 mb-6 max-w-sm">
-        Add a music folder to start building your library. LocalSpo will scan and organize everything
-        for you.
-      </p>
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={async () => {
-          const folder = await window.electronAPI.dialog.openFolder();
-          if (folder) {
-            window.dispatchEvent(new CustomEvent('scan-folder', { detail: folder }));
-          }
-        }}
-        className="px-6 py-3 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
-      >
-        Add Music Folder
-      </motion.button>
     </div>
   );
 }
-
-function HeroSection({ song }: { song: Song }) {
-  const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : '/default-cover.png';
-
-  return (
-    <div className="relative rounded-3xl overflow-hidden h-44 glass">
-      <img
-        src={coverSrc}
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover opacity-25 blur-2xl scale-110"
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = '/default-cover.png';
-        }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-r from-bg/90 via-bg/60 to-transparent" />
-      <div className="relative flex items-center gap-6 p-6 h-full">
-        <img
-          src={coverSrc}
-          alt={song.album}
-          className="w-28 h-28 rounded-2xl object-cover shadow-xl shrink-0"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = '/default-cover.png';
-          }}
-        />
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-primary font-semibold mb-1">
-            Now Playing
-          </p>
-          <h1 className="text-xl font-bold text-text mb-1 truncate max-w-xs">{song.title}</h1>
-          <p className="text-sm text-text/50">
-            {song.artist}{song.album && song.album !== song.title ? ` — ${song.album}` : ''}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SectionHeader({ title, onSeeAll }: { title: string; onSeeAll?: () => void }) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="text-xl font-bold text-text">{title}</h2>
-      {onSeeAll && (
-        <button
-          onClick={onSeeAll}
-          className="text-xs text-text/40 hover:text-primary transition-colors font-semibold"
-        >
-          See all
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ─── Playlist Card ───────────────────────────────────────
-
-interface PlaylistCardProps {
-  playlist: Playlist;
-  onPlay: () => void;
-  onClick: () => void;
-}
-
-function PlaylistCard({ playlist, onPlay, onClick }: PlaylistCardProps) {
-  const coverSrc = playlist.coverPath
-    ? `local-image://${encodeURIComponent(playlist.coverPath)}`
-    : null;
-  const { getSongById } = useLibraryStore();
-  const validSongCount = playlist.songIds.filter((sid) => !!getSongById(sid)).length;
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.03 }}
-      whileTap={{ scale: 0.97 }}
-      onClick={onClick}
-      className="group cursor-pointer shrink-0 w-44"
-    >
-      <div className="relative rounded-xl overflow-hidden aspect-square mb-3 bg-white/[0.04] border border-white/5">
-        {coverSrc ? (
-          <img
-            src={coverSrc}
-            alt={playlist.name}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <ListMusic size={40} className="text-text/15" />
-          </div>
-        )}
-        {/* Play overlay */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-end justify-end p-3">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onPlay();
-            }}
-            className="w-11 h-11 rounded-full bg-primary flex items-center justify-center shadow-glow opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-200"
-          >
-            <Play size={18} fill="currentColor" className="text-zinc-950 ml-0.5" />
-          </motion.button>
-        </div>
-      </div>
-      <p className="text-sm font-semibold truncate">{playlist.name}</p>
-      <p className="text-xs text-text/35 mt-0.5">
-        {validSongCount} song{validSongCount !== 1 ? 's' : ''}
-      </p>
-    </motion.div>
-  );
-}
-
-// ─── Song Card ───────────────────────────────────────────
-
-interface SongCardProps {
-  song: Song;
-  onPlay: () => void;
-  isPlaying: boolean;
-  onContextMenu: (e: React.MouseEvent) => void;
-}
-
-function SongCard({ song, onPlay, isPlaying, onContextMenu }: SongCardProps) {
-  const coverSrc = song.coverPath ? getImageUrl(song.coverPath) : '/default-cover.png';
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.03 }}
-      whileTap={{ scale: 0.97 }}
-      onClick={onPlay}
-      onContextMenu={onContextMenu}
-      className="group cursor-pointer shrink-0 w-40"
-    >
-      <div className="relative rounded-xl overflow-hidden aspect-square mb-3 shadow-md">
-        <img
-          src={coverSrc}
-          alt={song.album}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = '/default-cover.png';
-          }}
-        />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-end justify-end p-3">
-          <motion.div
-            className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-glow opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-200"
-          >
-            {isPlaying ? (
-              <div className="flex gap-0.5 items-end h-4 px-1">
-                {[1, 2, 3].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="w-0.5 bg-zinc-950 rounded-full"
-                    animate={{ height: ['30%', '100%', '30%'] }}
-                    transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <Play size={16} fill="currentColor" className="text-zinc-950 ml-0.5" />
-            )}
-          </motion.div>
-        </div>
-      </div>
-      <p className="text-sm font-semibold truncate">{song.title}</p>
-      <p className="text-xs text-text/40 truncate">{song.artist}</p>
-    </motion.div>
-  );
-}
-
-// ─── Album Card ──────────────────────────────────────────
-
-interface AlbumCardProps {
-  album: Album;
-  onPlay: () => void;
-  onClick: () => void;
-}
-
-function AlbumCard({ album, onPlay, onClick }: AlbumCardProps) {
-  const coverSrc = album.coverPath ? getImageUrl(album.coverPath) : '/default-cover.png';
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.03 }}
-      whileTap={{ scale: 0.97 }}
-      onClick={onClick}
-      className="group cursor-pointer shrink-0 w-40"
-    >
-      <div className="relative rounded-xl overflow-hidden aspect-square mb-3 shadow-md">
-        <img
-          src={coverSrc}
-          alt={album.name}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = '/default-cover.png';
-          }}
-        />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-end justify-end p-3">
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onPlay();
-            }}
-            className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-glow opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-200"
-          >
-            <Play size={16} fill="currentColor" className="text-zinc-950 ml-0.5" />
-          </motion.button>
-        </div>
-      </div>
-      <p className="text-sm font-semibold truncate">{album.name}</p>
-      <p className="text-xs text-text/40 truncate">{album.artist}</p>
-    </motion.div>
-  );
-}
-
-// Import for Disc3 kept for future use
-export { Disc3 };

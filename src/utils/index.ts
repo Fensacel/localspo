@@ -183,7 +183,21 @@ export function getAudioUrl(filePath: string): string {
 export function getImageUrl(filePath: string): string {
   if (!filePath) return '';
   if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('data:')) {
-    return filePath;
+    let clean = filePath;
+    // Upgrade YouTube thumbnail resolution (mqdefault/hqdefault/sddefault -> maxresdefault 1280x720 Ultra-HD)
+    if (clean.includes('i.ytimg.com')) {
+      clean = clean
+        .replace('/mqdefault.jpg', '/maxresdefault.jpg')
+        .replace('/hqdefault.jpg', '/maxresdefault.jpg')
+        .replace('/sddefault.jpg', '/maxresdefault.jpg')
+        .replace('/default.jpg', '/maxresdefault.jpg');
+    }
+    // Upgrade Google / YouTube Music thumbnail size (w120-h120 -> w1200-h1200)
+    if (clean.includes('googleusercontent.com') || clean.includes('ggpht.com')) {
+      clean = clean.replace(/=w\d+-h\d+[^$]*/, '=w1200-h1200-l90-rj').replace(/=s\d+[^$]*/, '=s1200');
+    }
+    return clean;
   }
   return `local-image://local/${encodeURIComponent(filePath)}`;
 }
+

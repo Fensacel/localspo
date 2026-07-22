@@ -143,9 +143,10 @@ export function MiniPlayer() {
 
   if (!currentSong) return null;
 
+  const isStreaming = !currentSong.path && (currentSong.sourceType === 'streaming' || !!currentSong.ytVideoId);
   const coverSrc = currentSong.coverPath
     ? getImageUrl(currentSong.coverPath)
-    : '/default-cover.png';
+    : (currentSong.remoteCoverUrl || '/default-cover.png');
 
   return (
     <motion.div
@@ -186,6 +187,7 @@ export function MiniPlayer() {
             animate={{ scale: 1, opacity: 1 }}
             src={coverSrc}
             alt={currentSong.album}
+            referrerPolicy="no-referrer"
             className="w-12 h-12 rounded-lg object-cover shadow-lg"
             onError={(e) => {
               (e.target as HTMLImageElement).src = '/default-cover.png';
@@ -194,6 +196,9 @@ export function MiniPlayer() {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-text truncate">{currentSong.title}</p>
             <p className="text-xs text-text/50 truncate">{currentSong.artist}</p>
+            {isStreaming && (
+              <span className="text-[9px] text-sky-400/70 font-medium">☁ Streaming</span>
+            )}
           </div>
         </div>
 

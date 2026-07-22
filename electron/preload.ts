@@ -111,6 +111,7 @@ export interface ElectronAPI {
   // Spotify Sync
   spotify: {
     search: (query: string, types?: string[]) => Promise<any>;
+    fetchUrl: (url: string) => Promise<string | null>;
     fetchPlaylistMeta: (url: string) => Promise<any>;
     getLinkedPlaylists: () => Promise<any[]>;
     addLinkedPlaylist: (url: string, options?: { autoSync?: boolean; syncInterval?: number }) => Promise<any>;
@@ -125,6 +126,23 @@ export interface ElectronAPI {
     onLinkedPlaylistsUpdated: (callback: (playlists: any[]) => void) => () => void;
     onSyncProgress: (callback: (progress: any) => void) => () => void;
     onAutoSyncTrigger: (callback: (spotifyId: string) => void) => () => void;
+  };
+  // Streaming
+  streaming: {
+    resolveUrl: (title: string, artist: string, album?: string, coverUrl?: string, forceRefresh?: boolean) => Promise<{
+      url: string;
+      videoId: string;
+      expiresAt: number;
+      title?: string;
+      artist?: string;
+      album?: string;
+      coverUrl?: string;
+      durationSeconds?: number;
+    } | null>;
+    resolveByVideoId: (videoId: string, forceRefresh?: boolean) => Promise<{ url: string; videoId: string; expiresAt: number } | null>;
+    prefetch: (title: string, artist: string) => Promise<boolean>;
+    pruneCache: () => Promise<{ cacheSize: number }>;
+    cacheStats: () => Promise<{ size: number }>;
   };
 }
 
@@ -214,6 +232,7 @@ const electronAPI: ElectronAPI = {
   },
   spotify: {
     search: (query, types) => ipcRenderer.invoke('spotify:search', query, types),
+    fetchUrl: (url) => ipcRenderer.invoke('spotify:fetchUrl', url),
     fetchPlaylistMeta: (url) => ipcRenderer.invoke('spotify:fetchPlaylistMeta', url),
     getLinkedPlaylists: () => ipcRenderer.invoke('spotify:getLinkedPlaylists'),
     addLinkedPlaylist: (url, options) => ipcRenderer.invoke('spotify:addLinkedPlaylist', url, options),
@@ -244,6 +263,18 @@ const electronAPI: ElectronAPI = {
       ipcRenderer.on('spotify:autoSyncTrigger', handler);
       return () => ipcRenderer.removeListener('spotify:autoSyncTrigger', handler);
     },
+  },
+  streaming: {
+    resolveUrl: (title, artist, album, coverUrl, forceRefresh) =>
+      ipcRenderer.invoke('streaming:resolveUrl', title, artist, album, coverUrl, forceRefresh),
+    resolveByVideoId: (videoId, forceRefresh) =>
+      ipcRenderer.invoke('streaming:resolveByVideoId', videoId, forceRefresh),
+    prefetch: (title, artist) =>
+      ipcRenderer.invoke('streaming:prefetch', title, artist),
+    pruneCache: () =>
+      ipcRenderer.invoke('streaming:pruneCache'),
+    cacheStats: () =>
+      ipcRenderer.invoke('streaming:cacheStats'),
   },
 };
 

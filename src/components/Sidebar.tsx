@@ -1,162 +1,288 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  Home,
-  Music,
   Disc3,
-  Mic2,
   Heart,
   ListMusic,
-  Clock,
   Settings,
-  Search,
   FolderOpen,
   FileText,
   Download,
+  Plus,
+  Library,
+  Folder,
+  Home,
 } from 'lucide-react';
-
-interface NavItem {
-  path: string;
-  label: string;
-  icon: React.ElementType;
-}
-
-const mainNavItems: NavItem[] = [
-  { path: '/', label: 'Home', icon: Home },
-  { path: '/songs', label: 'Songs', icon: Music },
-  { path: '/albums', label: 'Albums', icon: Disc3 },
-  { path: '/artists', label: 'Artists', icon: Mic2 },
-];
-
-const libraryNavItems: NavItem[] = [
-  { path: '/favorites', label: 'Favorites', icon: Heart },
-  { path: '/playlists', label: 'Playlists', icon: ListMusic },
-  { path: '/history', label: 'History', icon: Clock },
-  { path: '/downloads', label: 'Downloads', icon: Download },
-];
-
-const bottomNavItems: NavItem[] = [
-  { path: '/docs', label: 'Docs', icon: FileText },
-  { path: '/settings', label: 'Settings', icon: Settings },
-];
+import { usePlaylistStore, useLibraryStore, useFavoritesStore, usePlayerStore } from '@/stores';
+import { getImageUrl } from '@/utils';
 
 export function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { playlists, createPlaylist } = usePlaylistStore();
+  const { songs, albums } = useLibraryStore();
+  const { songIds } = useFavoritesStore();
+
+  const handleNav = (path: string) => {
+    usePlayerStore.setState({ showLyrics: false, showNowPlaying: false });
+    navigate(path);
+  };
+
+  const [activeFilter, setActiveFilter] = useState<'all' | 'playlists' | 'local'>('all');
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+
+  const handleCreatePlaylist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlaylistName.trim()) return;
+    const newPl = await createPlaylist(newPlaylistName.trim());
+    setNewPlaylistName('');
+    setIsCreatingPlaylist(false);
+    handleNav(`/playlists/${newPl.id}`);
+  };
 
   return (
     <motion.aside
       initial={{ x: -20, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="w-[260px] h-full glass-heavy hidden md:flex flex-col shrink-0 z-40"
+      className="w-[280px] h-full glass-heavy hidden md:flex flex-col shrink-0 z-40 select-none border-r border-white/5"
     >
-      {/* Search */}
-      <div className="px-4 pt-2 pb-3">
-        <NavLink
-          to="/search"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-text/50 glass transition-all duration-200 hover:text-text/80 hover:bg-white/5"
+      {/* Navigation Top Header */}
+      <div className="px-3 pt-3 pb-2 space-y-1">
+        <button
+          type="button"
+          onClick={() => handleNav('/')}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+            location.pathname === '/'
+              ? 'bg-white/10 text-white shadow-sm'
+              : 'text-text/60 hover:text-white hover:bg-white/5'
+          }`}
         >
-          <Search size={16} strokeWidth={1.8} />
-          <span>Search</span>
-        </NavLink>
+          <Home size={18} />
+          <span>Home</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleNav('/downloads')}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+            location.pathname === '/downloads'
+              ? 'bg-white/10 text-white shadow-sm'
+              : 'text-text/60 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <Download size={18} />
+          <span>Downloads</span>
+        </button>
       </div>
 
-      {/* Main Navigation */}
-      <nav className="px-3 flex-1 overflow-y-auto">
-        <div className="space-y-1">
-          {mainNavItems.map((item) => (
-            <SidebarLink key={item.path} item={item} isActive={location.pathname === item.path} />
-          ))}
-        </div>
-
-        {/* Library section */}
-        <div className="mt-6">
-          <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-text/30">
-            Library
-          </p>
-          <div className="space-y-1">
-            {libraryNavItems.map((item) => (
-              <SidebarLink key={item.path} item={item} isActive={location.pathname === item.path} />
-            ))}
+      {/* ── Spotify Style "Your Library" Section ───────────────────────────── */}
+      <div className="flex-1 flex flex-col min-h-0 mx-2 mb-2 bg-[#121214]/60 rounded-2xl border border-white/5 overflow-hidden">
+        {/* Your Library Header */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          <div className="flex items-center gap-2 text-text/70 hover:text-white transition-colors cursor-pointer" onClick={() => handleNav('/songs')}>
+            <Library size={18} />
+            <span className="text-sm font-bold tracking-wide">Your Library</span>
           </div>
+
+          <button
+            onClick={() => setIsCreatingPlaylist(true)}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-text/50 hover:text-white hover:bg-white/10 transition-all"
+            title="Create Playlist"
+          >
+            <Plus size={16} />
+          </button>
         </div>
 
-        {/* Folder shortcut */}
-        <div className="mt-6">
-          <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-text/30">
-            Quick Access
-          </p>
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1.5 px-3 py-1 overflow-x-auto scrollbar-none border-b border-white/5 pb-2.5">
+          <button
+            onClick={() => setActiveFilter('all')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              activeFilter === 'all'
+                ? 'bg-white text-black'
+                : 'bg-white/5 text-text/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setActiveFilter('playlists')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              activeFilter === 'playlists'
+                ? 'bg-white text-black'
+                : 'bg-white/5 text-text/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            Playlists
+          </button>
+          <button
+            onClick={() => setActiveFilter('local')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+              activeFilter === 'local'
+                ? 'bg-white text-black'
+                : 'bg-white/5 text-text/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            Local Files
+          </button>
+        </div>
+
+        {/* Create playlist quick input inline */}
+        {isCreatingPlaylist && (
+          <form onSubmit={handleCreatePlaylist} className="p-2 border-b border-white/10 bg-white/5">
+            <input
+              type="text"
+              autoFocus
+              placeholder="Playlist name..."
+              value={newPlaylistName}
+              onChange={(e) => setNewPlaylistName(e.target.value)}
+              onBlur={() => !newPlaylistName && setIsCreatingPlaylist(false)}
+              className="w-full bg-[#18181b] border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-text/40 focus:outline-none focus:border-primary"
+            />
+          </form>
+        )}
+
+        {/* Scrollable Library Items List */}
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1 scrollbar-thin">
+          {/* 1. Local Files item (Exact Spotify Local Files folder) */}
+          {(activeFilter === 'all' || activeFilter === 'local') && (
+            <div
+              onClick={() => handleNav('/songs')}
+              className={`flex items-center gap-3 p-2 rounded-xl transition-all cursor-pointer group ${
+                location.pathname === '/songs' ? 'bg-white/15 text-white' : 'hover:bg-white/5 text-text/70'
+              }`}
+            >
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <Folder size={18} className="text-emerald-400" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-white group-hover:text-primary transition-colors truncate">
+                  Local Files
+                </p>
+                <p className="text-[11px] text-text/40 truncate">
+                  Folder • {songs.length} tracks
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 2. Liked Songs */}
+          {(activeFilter === 'all' || activeFilter === 'playlists') && (
+            <div
+              onClick={() => handleNav('/favorites')}
+              className={`flex items-center gap-3 p-2 rounded-xl transition-all cursor-pointer group ${
+                location.pathname === '/favorites' ? 'bg-white/15 text-white' : 'hover:bg-white/5 text-text/70'
+              }`}
+            >
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-800 flex items-center justify-center shrink-0 shadow-md">
+                <Heart size={16} className="text-white fill-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-white group-hover:text-primary transition-colors truncate">
+                  Liked Songs
+                </p>
+                <p className="text-[11px] text-text/40 truncate">
+                  Playlist • {songIds.length} songs
+                </p>
+
+              </div>
+            </div>
+          )}
+
+          {/* 3. User Playlists */}
+          {(activeFilter === 'all' || activeFilter === 'playlists') &&
+            playlists.map((pl) => (
+              <div
+                key={pl.id}
+                onClick={() => handleNav(`/playlists/${pl.id}`)}
+                className={`flex items-center gap-3 p-2 rounded-xl transition-all cursor-pointer group ${
+                  location.pathname === `/playlists/${pl.id}` ? 'bg-white/15 text-white' : 'hover:bg-white/5 text-text/70'
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/5 overflow-hidden shrink-0 flex items-center justify-center">
+                  {pl.coverPath ? (
+                    <img src={getImageUrl(pl.coverPath) || ''} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <ListMusic size={16} className="text-text/30" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-white group-hover:text-primary transition-colors truncate">
+                    {pl.name}
+                  </p>
+                  <p className="text-[11px] text-text/40 truncate">
+                    Playlist • {pl.songIds.length} songs
+                  </p>
+                </div>
+              </div>
+            ))}
+
+          {/* 4. Local Albums */}
+          {(activeFilter === 'all' || activeFilter === 'local') &&
+            albums.slice(0, 10).map((alb) => (
+              <div
+                key={alb.id}
+                onClick={() => handleNav('/albums')}
+                className="flex items-center gap-3 p-2 rounded-xl transition-all cursor-pointer group hover:bg-white/5 text-text/70"
+              >
+                <div className="w-10 h-10 rounded-lg bg-white/5 overflow-hidden shrink-0 flex items-center justify-center">
+                  {alb.coverPath ? (
+                    <img src={getImageUrl(alb.coverPath) || ''} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Disc3 size={16} className="text-text/30" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-white group-hover:text-primary transition-colors truncate">
+                    {alb.name}
+                  </p>
+                  <p className="text-[11px] text-text/40 truncate">
+                    Album • {alb.artist}
+                  </p>
+                </div>
+              </div>
+            ))}
+        </div>
+
+        {/* Quick Folder Add button at bottom of library */}
+        <div className="p-2 border-t border-white/5">
           <button
             onClick={async () => {
               const folder = await window.electronAPI.dialog.openFolder();
               if (folder) {
-                // Will be handled by scanner service
                 window.dispatchEvent(new CustomEvent('scan-folder', { detail: folder }));
               }
             }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-text/50 transition-all duration-200 hover:text-text/80 hover:bg-white/5"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-text/50 hover:text-white hover:bg-white/5 transition-all"
           >
-            <FolderOpen size={18} strokeWidth={1.8} />
-            <span>Add Music Folder</span>
+            <FolderOpen size={15} />
+            <span>Add Local Folder</span>
           </button>
         </div>
-      </nav>
+      </div>
 
-      {/* Bottom nav */}
-      <div className="px-3 pb-4 border-t border-white/5 pt-3">
-        {bottomNavItems.map((item) => (
-          <SidebarLink key={item.path} item={item} isActive={location.pathname === item.path} />
-        ))}
+      {/* Bottom Settings Link */}
+      <div className="px-3 pb-3 pt-1 border-t border-white/5 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => handleNav('/docs')}
+          className="p-2 text-text/40 hover:text-white transition-colors cursor-pointer"
+          title="Documentation"
+        >
+          <FileText size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleNav('/settings')}
+          className="p-2 text-text/40 hover:text-white transition-colors cursor-pointer"
+          title="Settings"
+        >
+          <Settings size={16} />
+        </button>
       </div>
     </motion.aside>
-  );
-}
-
-interface SidebarLinkProps {
-  item: NavItem;
-  isActive: boolean;
-}
-
-function SidebarLink({ item, isActive }: SidebarLinkProps) {
-  const Icon = item.icon;
-
-  return (
-    <NavLink
-      to={item.path}
-      className="relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 group"
-    >
-      {/* Active background */}
-      {isActive && (
-        <motion.div
-          layoutId="sidebar-active"
-          className="absolute inset-0 bg-primary/15 rounded-xl border border-primary/20"
-          transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-        />
-      )}
-
-      {/* Active indicator bar */}
-      {isActive && (
-        <motion.div
-          layoutId="sidebar-indicator"
-          className="absolute left-0 top-2.5 bottom-2.5 w-[3px] bg-primary rounded-r-full glow-primary"
-          transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-        />
-      )}
-
-      <Icon
-        size={18}
-        strokeWidth={1.8}
-        className={`relative z-10 transition-colors duration-200 ${
-          isActive ? 'text-primary' : 'text-text/50 group-hover:text-text/80'
-        }`}
-      />
-      <span
-        className={`relative z-10 font-medium transition-colors duration-200 ${
-          isActive ? 'text-text' : 'text-text/60 group-hover:text-text/80'
-        }`}
-      >
-        {item.label}
-      </span>
-    </NavLink>
   );
 }

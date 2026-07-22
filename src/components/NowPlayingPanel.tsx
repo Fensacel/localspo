@@ -32,23 +32,33 @@ export function NowPlayingPanel({ onClose }: NowPlayingPanelProps) {
       setLyrics(null);
 
       try {
-        const result = await window.electronAPI.lyrics.read(
-          currentSong.id,
-          currentSong.path,
-          currentSong.lrcPath,
-          currentSong.hasEmbeddedLyrics,
-          currentSong.artist,
-          currentSong.title,
-          currentSong.album,
-          currentSong.duration,
+        const timeoutPromise = new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 15000)
         );
+
+        const result = await Promise.race([
+          window.electronAPI.lyrics.read(
+            currentSong.id,
+            currentSong.path,
+            currentSong.lrcPath,
+            currentSong.hasEmbeddedLyrics,
+            currentSong.artist,
+            currentSong.title,
+            currentSong.album,
+            currentSong.duration
+          ),
+          timeoutPromise,
+        ]);
 
         if (cancelled) return;
 
-        if (result) {
-          const parsed = parseLyrics(result.content);
-          const processed = await RomanizationService.processLyrics(parsed, currentSong.id);
-          if (!cancelled) setLyrics(processed);
+        if (result && result.content) {
+          const parsed = parseLyrics(result.content, currentSong.artist);
+          setLyrics(parsed);
+          RomanizationService.clearCache(currentSong.id);
+          RomanizationService.processLyrics(parsed, currentSong.id, true).then((processed) => {
+            if (!cancelled && processed) setLyrics(processed);
+          });
         }
       } catch (err) {
         console.warn('[NowPlayingPanel] Failed to load lyrics:', err);
@@ -66,7 +76,9 @@ export function NowPlayingPanel({ onClose }: NowPlayingPanelProps) {
 
   if (!currentSong) return null;
 
-  const coverSrc = currentSong.coverPath ? getImageUrl(currentSong.coverPath) : '/default-cover.png';
+  const coverSrc = currentSong.coverPath
+    ? getImageUrl(currentSong.coverPath)
+    : (currentSong.remoteCoverUrl || (currentSong as any).coverUrl || '/default-cover.png');
   const isFav = isFavoriteSong(currentSong.id);
 
   // Next in queue
@@ -120,6 +132,7 @@ export function NowPlayingPanel({ onClose }: NowPlayingPanelProps) {
           <img 
             src={coverSrc} 
             alt={currentSong.album} 
+            referrerPolicy="no-referrer"
             className="w-full h-full object-cover"
             onError={(e) => {
               (e.target as HTMLImageElement).src = '/default-cover.png';
@@ -203,8 +216,9 @@ export function NowPlayingPanel({ onClose }: NowPlayingPanelProps) {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <img 
-                  src={nextSong.coverPath ? getImageUrl(nextSong.coverPath) : '/default-cover.png'}
+                  src={nextSong.coverPath ? getImageUrl(nextSong.coverPath) : (nextSong.remoteCoverUrl || (nextSong as any).coverUrl || '/default-cover.png')}
                   alt={nextSong.title}
+                  referrerPolicy="no-referrer"
                   className="w-12 h-12 rounded-lg object-cover bg-zinc-800"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = '/default-cover.png';
@@ -237,6 +251,7 @@ export function NowPlayingPanel({ onClose }: NowPlayingPanelProps) {
             <img 
               src={coverSrc}
               alt=""
+              referrerPolicy="no-referrer"
               className="w-full h-full object-cover blur-md scale-110 opacity-40"
             />
             <div className="absolute bottom-3 left-4 z-20">
