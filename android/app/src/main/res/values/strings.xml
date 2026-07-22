@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">LocalSpo</string>
-    <string name="title_activity_main">LocalSpo</string>
-    <string name="package_name">com.localspo.app</string>
-    <string name="custom_url_scheme">com.localspo.app</string>
-</resources>

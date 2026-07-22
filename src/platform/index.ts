@@ -12,6 +12,8 @@ export const platformService: PlatformAPI = isElectronEnv
   ? electronPlatform
   : capacitorPlatform;
 
+export const platform = platformService;
+
 // Attach window.platform globally for direct access
 if (typeof window !== 'undefined') {
   (window as any).platform = platformService;

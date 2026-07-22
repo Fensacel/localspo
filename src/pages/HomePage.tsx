@@ -47,6 +47,11 @@ export function HomePage() {
           }
         } catch {}
 
+        if (!window.electronAPI?.spotify?.search) {
+          setIsLoadingFeatured(false);
+          return;
+        }
+
         const res = await window.electronAPI.spotify.search(searchQuery, ['track']);
         if (cancelled) return;
 

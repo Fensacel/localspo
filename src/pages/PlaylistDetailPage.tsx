@@ -116,7 +116,7 @@ export function PlaylistDetailPage() {
       const playlistArtists = Array.from(new Set(songs.map((s) => s.artist).filter(Boolean)));
       const query = playlistArtists.length > 0 ? playlistArtists[Math.floor(Math.random() * playlistArtists.length)] : 'Trending Hits';
 
-      const res = await window.electronAPI.spotify.search(query, ['track']);
+      const res = await window.electronAPI?.spotify?.search?.(query, ['track']);
       if (res && Array.isArray(res.tracks)) {
         for (const t of res.tracks) {
           if (!t.ytVideoId) continue;

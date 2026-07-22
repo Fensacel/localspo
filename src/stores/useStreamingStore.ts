@@ -111,14 +111,12 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     try {
       console.log(`[StreamingStore] Resolving stream for: ${song.artist} - ${song.title}`);
 
-      // Try by videoId first ONLY if available and valid 11-char YouTube ID
       let result = null;
       const isValidYtId = song.ytVideoId && song.ytVideoId.length === 11 && !song.ytVideoId.includes(' ') && /^[a-zA-Z0-9_-]{11}$/.test(song.ytVideoId);
       if (isValidYtId) {
         result = await window.electronAPI.streaming.resolveByVideoId(song.ytVideoId!, forceRefresh);
       }
 
-      // Fallback to search by title+artist
       if (!result) {
         result = await window.electronAPI.streaming.resolveUrl(
           song.title,

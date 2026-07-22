@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ImportPlaylistModal } from '@/components/ImportPlaylistModal';
 import { getImageUrl } from '@/utils';
+import { platformService } from '@/platform';
 
 export function PlaylistsPage() {
   const { playlists, createPlaylist, deletePlaylist, togglePinPlaylist, toggleFavoritePlaylist } =
@@ -19,7 +20,7 @@ export function PlaylistsPage() {
   const navigate = useNavigate();
 
   const handlePickCover = async () => {
-    const file = await window.electronAPI.dialog.openImage();
+    const file = await platformService.dialog.openImage();
     if (file) {
       setNewPlaylistCover(file);
     }

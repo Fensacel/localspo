@@ -49,4 +49,24 @@ export interface PlatformAPI {
     onQueueUpdated?: (callback: (queue: any[]) => void) => () => void;
     onAutoImportFolder?: (callback: (folder: string) => void) => () => void;
   };
+
+  mediaSession?: {
+    updateMetadata: (song: { title: string; artist: string; album?: string; coverUrl?: string }) => void;
+    updatePlaybackState: (isPlaying: boolean) => void;
+    setActionHandlers: (handlers: {
+      play?: () => void;
+      pause?: () => void;
+      previoustrack?: () => void;
+      nexttrack?: () => void;
+      seekto?: (details: { seekTime: number }) => void;
+    }) => void;
+  };
+
+  backButton?: {
+    onBackButton: (callback: () => boolean | void) => () => void;
+  };
+
+  network?: {
+    onStatusChange: (callback: (isOnline: boolean) => void) => () => void;
+  };
 }

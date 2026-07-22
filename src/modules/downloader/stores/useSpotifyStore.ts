@@ -73,21 +73,15 @@ export const useSpotifyStore = create<SpotifyState>((set, get) => ({
 
     set({ isSearching: true, searchResults: null });
     try {
+      const searchTypes = t === 'track' ? ['track'] : t === 'album' ? ['album'] : t === 'artist' ? ['artist'] : t === 'playlist' ? ['playlist'] : ['track', 'album', 'artist', 'playlist'];
+
       if (!window.electronAPI?.spotify) throw new Error('Spotify API not available');
+      const results = await window.electronAPI.spotify.search(q, searchTypes);
 
-      // Determine which types to search based on selected type
-      const types =
-        t === 'track'
-          ? ['track']
-          : t === 'album'
-            ? ['album']
-            : t === 'artist'
-              ? ['artist']
-              : t === 'playlist'
-                ? ['playlist']
-                : ['track', 'album', 'artist', 'playlist'];
-
-      const results = await window.electronAPI.spotify.search(q, types);
+      if (!results) {
+        set({ searchResults: { tracks: [], albums: [], artists: [], playlists: [] }, isSearching: false });
+        return;
+      }
 
       // Save user search query to localStorage for dynamic homepage Quick Picks
       try {

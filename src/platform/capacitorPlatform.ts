@@ -206,4 +206,82 @@ export const capacitorPlatform: PlatformAPI = {
   downloader: {
     isAvailable: false,
   },
+
+  mediaSession: {
+    updateMetadata: (song) => {
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: song.title,
+            artist: song.artist,
+            album: song.album || '',
+            artwork: song.coverUrl
+              ? [{ src: song.coverUrl, sizes: '512x512', type: 'image/jpeg' }]
+              : [],
+          });
+        } catch (e) {
+          console.warn('[MediaSession] Metadata update error:', e);
+        }
+      }
+    },
+
+    updatePlaybackState: (isPlaying) => {
+      if ('mediaSession' in navigator) {
+        try {
+          navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+        } catch (e) {
+          console.warn('[MediaSession] Playback state error:', e);
+        }
+      }
+    },
+
+    setActionHandlers: (handlers) => {
+      if (!('mediaSession' in navigator)) return;
+      const actions: MediaSessionAction[] = ['play', 'pause', 'previoustrack', 'nexttrack', 'seekto'];
+      actions.forEach((action) => {
+        try {
+          if (action === 'play' && handlers.play) {
+            navigator.mediaSession.setActionHandler('play', handlers.play);
+          } else if (action === 'pause' && handlers.pause) {
+            navigator.mediaSession.setActionHandler('pause', handlers.pause);
+          } else if (action === 'previoustrack' && handlers.previoustrack) {
+            navigator.mediaSession.setActionHandler('previoustrack', handlers.previoustrack);
+          } else if (action === 'nexttrack' && handlers.nexttrack) {
+            navigator.mediaSession.setActionHandler('nexttrack', handlers.nexttrack);
+          } else if (action === 'seekto' && handlers.seekto) {
+            navigator.mediaSession.setActionHandler('seekto', (details) => {
+              if (details.seekTime !== undefined && handlers.seekto) {
+                handlers.seekto({ seekTime: details.seekTime });
+              }
+            });
+          }
+        } catch (e) {
+          console.warn(`[MediaSession] Failed to set action handler ${action}:`, e);
+        }
+      });
+    },
+  },
+
+  backButton: {
+    onBackButton: (callback) => {
+      const handler = () => {
+        callback();
+      };
+      window.addEventListener('popstate', handler);
+      return () => window.removeEventListener('popstate', handler);
+    },
+  },
+
+  network: {
+    onStatusChange: (callback) => {
+      const handleOnline = () => callback(true);
+      const handleOffline = () => callback(false);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    },
+  },
 };

@@ -1,4 +1,5 @@
 import { useSettingsStore } from '@/stores';
+import { platformService } from '@/platform';
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import {
@@ -48,7 +49,7 @@ export function SettingsPage() {
   }, []);
 
   const handleAddFolder = async () => {
-    const folder = await window.electronAPI.dialog.openFolder();
+    const folder = await platformService.dialog.openFolder();
     if (folder) {
       await addMusicFolder(folder);
       window.dispatchEvent(new CustomEvent('scan-folder', { detail: folder }));

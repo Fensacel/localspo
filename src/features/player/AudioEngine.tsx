@@ -58,8 +58,8 @@ export function AudioEngine() {
         title: currentSong.title,
         artist: currentSong.artist,
         album: currentSong.album || '',
-        artwork: currentSong.coverPath
-          ? [{ src: getAudioUrl(currentSong.coverPath), sizes: '512x512', type: 'image/png' }]
+        artwork: (currentSong.remoteCoverUrl || currentSong.coverPath)
+          ? [{ src: currentSong.remoteCoverUrl || getAudioUrl(currentSong.coverPath!), sizes: '512x512', type: 'image/jpeg' }]
           : [],
       });
 
