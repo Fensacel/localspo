@@ -30,7 +30,7 @@ export function SettingsPage() {
     removeMusicFolder,
   } = useSettingsStore();
 
-  const [appVersion, setAppVersion] = useState<string>('2.0.0');
+  const [appVersion, setAppVersion] = useState<string>('2.0.1');
   const [updateStatus, setUpdateStatus] = useState<{ status: string; version?: string; percent?: number; error?: string } | null>(null);
 
   useEffect(() => {
@@ -214,8 +214,8 @@ export function SettingsPage() {
                       {updateStatus?.status === 'checking'
                         ? 'Checking...'
                         : updateStatus?.status === 'downloading'
-                        ? `Downloading (${updateStatus.percent || 0}%)`
-                        : 'Check for updates'}
+                          ? `Downloading (${updateStatus.percent || 0}%)`
+                          : 'Check for updates'}
                     </span>
                   </motion.button>
                 </div>
@@ -268,12 +268,20 @@ export function SettingsPage() {
         </SettingsSection>
 
         {/* About */}
-        <div className="glass rounded-2xl p-6 text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
+        <div className="glass rounded-2xl p-6 text-center space-y-3">
+          <div className="flex items-center justify-center gap-2">
             <img src="logo.png" className="w-5 h-5 object-contain" alt="" />
             <span className="text-sm font-bold tracking-wider">LocalSpo</span>
           </div>
           <p className="text-xs text-text/30">Version {appVersion}</p>
+          <div>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('app:showWhatsNew'))}
+              className="px-3 py-1.5 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-400 rounded-xl text-xs font-bold transition-all"
+            >
+              Catatan Pembaruan (What's New)
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -314,9 +322,8 @@ function ToggleSetting({ label, description, enabled, onChange }: ToggleSettingP
       </div>
       <button
         onClick={() => onChange(!enabled)}
-        className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-          enabled ? 'bg-primary' : 'bg-white/10'
-        }`}
+        className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${enabled ? 'bg-primary' : 'bg-white/10'
+          }`}
       >
         <motion.div
           animate={{ x: enabled ? 20 : 2 }}

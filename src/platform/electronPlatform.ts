@@ -18,7 +18,7 @@ export const electronPlatform: PlatformAPI = {
     scanFolder: (path: string) => window.electronAPI?.scanner?.scan?.(path) ?? Promise.resolve(null),
     getLibrary: () => window.electronAPI?.scanner?.getLibrary?.() ?? Promise.resolve(null),
     updateTags: (params: any) => window.electronAPI?.scanner?.updateTags?.(params) ?? Promise.resolve(null),
-    onProgress: (callback: (data: any) => void) => window.electronAPI?.scanner?.onProgress?.(callback) ?? (() => {}),
+    onProgress: (callback: (data: any) => void) => window.electronAPI?.scanner?.onProgress?.(callback) ?? (() => { }),
   },
 
   lyrics: {
@@ -26,14 +26,14 @@ export const electronPlatform: PlatformAPI = {
   },
 
   app: {
-    getVersion: () => window.electronAPI?.app?.getVersion?.() ?? Promise.resolve('2.0.0'),
+    getVersion: () => window.electronAPI?.app?.getVersion?.() ?? Promise.resolve('2.0.1'),
   },
 
   updater: {
     isAvailable: true,
     check: () => window.electronAPI?.updater?.check?.(),
     quitAndInstall: () => window.electronAPI?.updater?.quitAndInstall?.(),
-    onStatus: (callback: (data: any) => void) => window.electronAPI?.updater?.onStatus?.(callback) ?? (() => {}),
+    onStatus: (callback: (data: any) => void) => window.electronAPI?.updater?.onStatus?.(callback) ?? (() => { }),
   },
 
   downloader: {
@@ -48,7 +48,7 @@ export const electronPlatform: PlatformAPI = {
     clearFinished: () => window.electronAPI?.downloader?.clearFinished?.() ?? Promise.resolve(null),
     openDownloadFolder: () => window.electronAPI?.downloader?.openDownloadFolder?.() ?? Promise.resolve(null),
     updateSettings: (partial: any) => window.electronAPI?.downloader?.updateSettings?.(partial) ?? Promise.resolve(null),
-    onQueueUpdated: (callback: (queue: any[]) => void) => window.electronAPI?.downloader?.onQueueUpdated?.(callback) ?? (() => {}),
-    onAutoImportFolder: (callback: (folder: string) => void) => window.electronAPI?.downloader?.onAutoImportFolder?.(callback) ?? (() => {}),
+    onQueueUpdated: (callback: (queue: any[]) => void) => window.electronAPI?.downloader?.onQueueUpdated?.(callback) ?? (() => { }),
+    onAutoImportFolder: (callback: (folder: string) => void) => window.electronAPI?.downloader?.onAutoImportFolder?.(callback) ?? (() => { }),
   },
 };

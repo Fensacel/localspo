@@ -184,7 +184,7 @@ export const webPlatform: PlatformAPI = {
       }
     },
     updateTags: async () => null,
-    onProgress: (_callback: (data: any) => void) => () => {},
+    onProgress: (_callback: (data: any) => void) => () => { },
   },
 
   lyrics: {
@@ -192,7 +192,7 @@ export const webPlatform: PlatformAPI = {
   },
 
   app: {
-    getVersion: async () => '2.0.0-web',
+    getVersion: async () => '2.0.1-web',
   },
 
   updater: {

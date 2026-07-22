@@ -1,6 +1,6 @@
 {
   "name": "localspo",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A local music player desktop application built with Electron, React, and Tailwind CSS.",
   "main": "dist-electron/main.js",
   "author": "LocalSpo",

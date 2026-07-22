@@ -5,8 +5,18 @@ import { Sparkles, RefreshCw, X, CheckCircle2, Download } from 'lucide-react';
 interface UpdateData {
   status: 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
   version?: string;
+  releaseName?: string;
+  releaseNotes?: string | Array<{ note?: string | null }>;
   percent?: number;
   error?: string;
+}
+
+function parseReleaseNotes(notes?: string | Array<{ note?: string | null }>): string {
+  if (!notes) return '';
+  if (Array.isArray(notes)) {
+    return notes.map((n) => (typeof n === 'string' ? n : n.note || '')).filter(Boolean).join('\n');
+  }
+  return notes;
 }
 
 export function UpdateModal() {
@@ -34,7 +44,14 @@ export function UpdateModal() {
   useEffect(() => {
     const handleTestEvent = (e: Event) => {
       const customEvent = e as CustomEvent;
-      setUpdateInfo(customEvent.detail || { status: 'downloaded', version: '2.0.0' });
+      setUpdateInfo(
+        customEvent.detail || {
+          status: 'downloaded',
+          version: '2.0.1',
+          releaseName: 'v2.0.1 - Instant Online Stream Fix',
+          releaseNotes: '• Fixed online search track instant playback\n• Added YouTube Music streaming auto-resolver\n• Improved desktop audio engine stability',
+        },
+      );
       setIsOpen(true);
     };
 
@@ -53,6 +70,7 @@ export function UpdateModal() {
 
   const isDownloaded = updateInfo.status === 'downloaded';
   const isDownloading = updateInfo.status === 'downloading' || updateInfo.status === 'available';
+  const notesText = parseReleaseNotes(updateInfo.releaseNotes);
 
   return (
     <AnimatePresence>
@@ -88,9 +106,22 @@ export function UpdateModal() {
               : `LocalSpo v${updateInfo.version || ''} is available and currently downloading in the background.`}
           </p>
 
+          {/* Release Notes Preview */}
+          {notesText && (
+            <div className="mt-4 p-3 bg-white/5 border border-white/10 rounded-xl space-y-1">
+              <p className="text-[11px] font-bold text-sky-400 flex items-center gap-1.5">
+                <Sparkles size={12} />
+                {updateInfo.releaseName || `What's New in v${updateInfo.version || ''}`}
+              </p>
+              <div className="text-text/75 text-[11px] max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed custom-scrollbar pt-1">
+                {notesText}
+              </div>
+            </div>
+          )}
+
           {/* Progress bar if downloading */}
           {isDownloading && (
-            <div className="mt-5 space-y-2">
+            <div className="mt-4 space-y-2">
               <div className="flex justify-between text-xs font-medium text-text/70">
                 <span className="flex items-center gap-1.5">
                   <Download size={13} className="text-primary animate-bounce" />

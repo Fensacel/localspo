@@ -227,7 +227,14 @@ function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  const sendUpdateStatus = (data: { status: string; version?: string; percent?: number; error?: string }) => {
+  const sendUpdateStatus = (data: {
+    status: string;
+    version?: string;
+    releaseName?: string;
+    releaseNotes?: string | Array<{ note?: string | null }>;
+    percent?: number;
+    error?: string;
+  }) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('updater:status', data);
     }
@@ -238,7 +245,12 @@ function setupAutoUpdater(): void {
   });
 
   autoUpdater.on('update-available', (info) => {
-    sendUpdateStatus({ status: 'available', version: info.version });
+    sendUpdateStatus({
+      status: 'available',
+      version: info.version,
+      releaseName: info.releaseName || undefined,
+      releaseNotes: info.releaseNotes || undefined,
+    });
   });
 
   autoUpdater.on('update-not-available', (info) => {
@@ -257,7 +269,12 @@ function setupAutoUpdater(): void {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    sendUpdateStatus({ status: 'downloaded', version: info.version });
+    sendUpdateStatus({
+      status: 'downloaded',
+      version: info.version,
+      releaseName: info.releaseName || undefined,
+      releaseNotes: info.releaseNotes || undefined,
+    });
   });
 }
 

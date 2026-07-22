@@ -14,6 +14,7 @@ import { LyricsView } from '@/features/lyrics/LyricsView';
 import { NowPlayingPanel } from '@/components/NowPlayingPanel';
 import { ToastContainer } from '@/components/ToastContainer';
 import { UpdateModal } from '@/components/UpdateModal';
+import { WhatsNewModal } from '@/components/WhatsNewModal';
 
 export function MainLayout() {
   const location = useLocation();
@@ -141,6 +142,9 @@ export function MainLayout() {
 
       {/* Auto Update Popup Modal */}
       <UpdateModal />
+
+      {/* What's New Release Notes Modal */}
+      <WhatsNewModal />
     </div>
   );
 }
