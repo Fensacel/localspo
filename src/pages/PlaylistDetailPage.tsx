@@ -119,8 +119,9 @@ export function PlaylistDetailPage() {
       const res = await window.electronAPI?.spotify?.search?.(query, ['track']);
       if (res && Array.isArray(res.tracks)) {
         for (const t of res.tracks) {
-          if (!t.ytVideoId) continue;
-          const streamId = `stream_${t.ytVideoId}`;
+          const trackId = t.ytVideoId || t.id;
+          if (!trackId) continue;
+          const streamId = `stream_${trackId}`;
           if (existingIds.has(streamId)) continue;
 
           const s = createStreamSong({
@@ -129,8 +130,8 @@ export function PlaylistDetailPage() {
             artist: t.artist,
             album: t.album || 'Single',
             duration: t.durationMs ? t.durationMs / 1000 : 180,
-            coverUrl: t.coverUrl || `https://i.ytimg.com/vi/${t.ytVideoId}/hqdefault.jpg`,
-            ytVideoId: t.ytVideoId,
+            coverUrl: t.coverUrl || (t.ytVideoId ? `https://i.ytimg.com/vi/${t.ytVideoId}/hqdefault.jpg` : undefined),
+            ytVideoId: t.ytVideoId || '',
           });
           recSongs.push(s);
         }

@@ -61,29 +61,26 @@ export function SearchPage() {
   const onlineArtists = searchResults?.artists || [];
 
   const handlePlayStream = (track: SpotifySearchTrack) => {
-    if (!track.ytVideoId) {
-      showToast('No streaming ID available for this track', 'error');
-      return;
-    }
+    const trackId = track.ytVideoId || track.id;
+    if (!trackId) return;
 
-    const allStreamSongs = onlineTracks
-      .filter((t) => t.ytVideoId)
-      .map((t) => {
-        const s = createStreamSong({
-          id: `stream_${t.ytVideoId}`,
-          title: t.title,
-          artist: t.artist,
-          album: t.album,
-          duration: t.durationMs ? t.durationMs / 1000 : 0,
-          coverUrl: t.coverUrl || undefined,
-          ytVideoId: t.ytVideoId!,
-        });
-
-        useLibraryStore.getState().addStreamSong(s);
-        return s;
+    const allStreamSongs = onlineTracks.map((t) => {
+      const idKey = t.ytVideoId || t.id;
+      const s = createStreamSong({
+        id: `stream_${idKey}`,
+        title: t.title,
+        artist: t.artist,
+        album: t.album || 'Single',
+        duration: t.durationMs ? t.durationMs / 1000 : 180,
+        coverUrl: t.coverUrl || (t.ytVideoId ? `https://i.ytimg.com/vi/${t.ytVideoId}/hqdefault.jpg` : undefined),
+        ytVideoId: t.ytVideoId || '',
       });
 
-    const idx = allStreamSongs.findIndex((s) => s.ytVideoId === track.ytVideoId);
+      useLibraryStore.getState().addStreamSong(s);
+      return s;
+    });
+
+    const idx = onlineTracks.findIndex((t) => (t.ytVideoId || t.id) === trackId);
     setQueue(allStreamSongs, idx >= 0 ? idx : 0, 'Online Search Streaming');
     usePlayerStore.getState().setIsPlaying(true);
     window.dispatchEvent(new CustomEvent('player:play'));
@@ -92,15 +89,16 @@ export function SearchPage() {
 
 
   const handleAddToQueueStream = (track: SpotifySearchTrack) => {
-    if (!track.ytVideoId) return;
+    const trackId = track.ytVideoId || track.id;
+    if (!trackId) return;
     const streamSong = createStreamSong({
-      id: `stream_${track.ytVideoId}`,
+      id: `stream_${trackId}`,
       title: track.title,
       artist: track.artist,
-      album: track.album,
-      duration: track.durationMs ? track.durationMs / 1000 : 0,
+      album: track.album || 'Single',
+      duration: track.durationMs ? track.durationMs / 1000 : 180,
       coverUrl: track.coverUrl || undefined,
-      ytVideoId: track.ytVideoId,
+      ytVideoId: track.ytVideoId || '',
     });
     useLibraryStore.getState().addStreamSong(streamSong);
     usePlayerStore.getState().addToQueue(streamSong);
@@ -234,22 +232,24 @@ export function SearchPage() {
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.02 }}
+                      onClick={() => handlePlayStream(track)}
                       onContextMenu={(e) => {
                         e.preventDefault();
-                        if (track.ytVideoId) {
+                        const trackId = track.ytVideoId || track.id;
+                        if (trackId) {
                           const streamSong = createStreamSong({
-                            id: `stream_${track.ytVideoId}`,
+                            id: `stream_${trackId}`,
                             title: track.title,
                             artist: track.artist,
                             album: track.album || 'Single',
                             duration: track.durationMs ? track.durationMs / 1000 : 180,
-                            coverUrl: track.coverUrl || `https://i.ytimg.com/vi/${track.ytVideoId}/hqdefault.jpg`,
-                            ytVideoId: track.ytVideoId,
+                            coverUrl: track.coverUrl || (track.ytVideoId ? `https://i.ytimg.com/vi/${track.ytVideoId}/hqdefault.jpg` : undefined),
+                            ytVideoId: track.ytVideoId || '',
                           });
                           setContextMenu({ song: streamSong, x: e.clientX, y: e.clientY });
                         }
                       }}
-                      className="group flex items-center gap-4 px-4 py-3 bg-[#181818] hover:bg-[#222226] rounded-xl transition-all cursor-default"
+                      className="group flex items-center gap-4 px-4 py-3 bg-[#181818] hover:bg-[#222226] rounded-xl transition-all cursor-pointer"
                     >
                       {/* Artwork */}
                       <div className="w-12 h-12 rounded-lg bg-white/5 overflow-hidden shrink-0 relative">
@@ -271,15 +271,16 @@ export function SearchPage() {
                           </div>
                         )}
 
-                        {track.ytVideoId && (
-                          <button
-                            onClick={() => handlePlayStream(track)}
-                            className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
-                            title="Stream now"
-                          >
-                            <Play size={18} className="text-primary fill-primary" />
-                          </button>
-                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePlayStream(track);
+                          }}
+                          className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg"
+                          title="Stream now"
+                        >
+                          <Play size={18} className="text-primary fill-primary" />
+                        </button>
                       </div>
 
                       {/* Song Details */}
@@ -290,30 +291,32 @@ export function SearchPage() {
 
                       {/* Actions */}
                       <div className="flex items-center gap-2 shrink-0">
-
-
-                        {track.ytVideoId && (
-                          <>
-                            <button
-                              onClick={() => handlePlayStream(track)}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-primary/15 hover:bg-primary/25 text-primary text-xs font-bold rounded-lg transition-colors"
-                            >
-                              <Play size={11} className="fill-primary" />
-                              Play
-                            </button>
-                            <button
-                              onClick={() => handleAddToQueueStream(track)}
-                              title="Add to queue"
-                              className="p-1.5 text-text/40 hover:text-sky-400 transition-colors"
-                            >
-                              <ListPlus size={16} />
-                            </button>
-                          </>
-                        )}
-
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePlayStream(track);
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-primary/15 hover:bg-primary/25 text-primary text-xs font-bold rounded-lg transition-colors"
+                        >
+                          <Play size={11} className="fill-primary" />
+                          Play
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddToQueueStream(track);
+                          }}
+                          title="Add to queue"
+                          className="p-1.5 text-text/40 hover:text-sky-400 transition-colors"
+                        >
+                          <ListPlus size={16} />
+                        </button>
 
                         <button
-                          onClick={() => handleDownload(track.spotifyUrl, track.title)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(track.spotifyUrl, track.title);
+                          }}
                           title="Download for offline"
                           className="p-1.5 text-text/40 hover:text-white transition-colors"
                         >
@@ -324,6 +327,7 @@ export function SearchPage() {
                           href={track.spotifyUrl}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
                           className="p-1.5 text-text/25 hover:text-text/60 transition-colors"
                           title="Open link"
                         >

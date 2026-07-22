@@ -1,8 +1,8 @@
 import { electronPlatform } from './electronPlatform';
-import { capacitorPlatform } from './capacitorPlatform';
+import { webPlatform } from './webPlatform';
 import type { PlatformAPI } from './types';
 
-// Detect if running inside Electron or Capacitor / Android
+// Detect if running inside Electron or Web browser
 const isElectronEnv =
   typeof window !== 'undefined' &&
   window.electronAPI !== undefined &&
@@ -10,7 +10,7 @@ const isElectronEnv =
 
 export const platformService: PlatformAPI = isElectronEnv
   ? electronPlatform
-  : capacitorPlatform;
+  : webPlatform;
 
 export const platform = platformService;
 

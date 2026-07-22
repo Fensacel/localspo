@@ -1,9 +1,8 @@
-import { Preferences } from '@capacitor/preferences';
 import type { PlatformAPI } from './types';
 
-export const capacitorPlatform: PlatformAPI = {
+export const webPlatform: PlatformAPI = {
   isElectron: false,
-  isAndroid: true,
+  isAndroid: false,
 
   dialog: {
     openFolder: async () => {
@@ -19,7 +18,7 @@ export const capacitorPlatform: PlatformAPI = {
             return;
           }
 
-          const { value } = await Preferences.get({ key: 'android_library.json' });
+          const value = localStorage.getItem('web_library.json');
           let existingSongs: any[] = [];
           let existingAlbums: any[] = [];
           let existingArtists: any[] = [];
@@ -56,7 +55,7 @@ export const capacitorPlatform: PlatformAPI = {
             }
 
             const albumName = 'Local Music';
-            const songId = 'android_' + Math.random().toString(36).slice(2, 9);
+            const songId = 'web_' + Math.random().toString(36).slice(2, 9);
             const albumId = 'album_' + artistName.toLowerCase().replace(/\s+/g, '_');
             const artistId = 'artist_' + artistName.toLowerCase().replace(/\s+/g, '_');
 
@@ -115,7 +114,7 @@ export const capacitorPlatform: PlatformAPI = {
             lastScan: Date.now(),
           };
 
-          await Preferences.set({ key: 'android_library.json', value: JSON.stringify(library) });
+          localStorage.setItem('web_library.json', JSON.stringify(library));
           resolve(`Imported ${files.length} song(s)`);
         };
         input.click();
@@ -147,7 +146,7 @@ export const capacitorPlatform: PlatformAPI = {
   data: {
     read: async <T = unknown>(key: string): Promise<T | null> => {
       try {
-        const { value } = await Preferences.get({ key });
+        const value = localStorage.getItem(key);
         if (!value) return null;
         return JSON.parse(value) as T;
       } catch {
@@ -157,7 +156,7 @@ export const capacitorPlatform: PlatformAPI = {
 
     write: async <T = unknown>(key: string, value: T): Promise<boolean> => {
       try {
-        await Preferences.set({ key, value: JSON.stringify(value) });
+        localStorage.setItem(key, JSON.stringify(value));
         return true;
       } catch {
         return false;
@@ -167,7 +166,7 @@ export const capacitorPlatform: PlatformAPI = {
 
   scanner: {
     scanFolder: async (_path: string) => {
-      const { value } = await Preferences.get({ key: 'android_library.json' });
+      const value = localStorage.getItem('web_library.json');
       if (!value) return { songs: [], albums: [], artists: [] };
       try {
         return JSON.parse(value);
@@ -176,7 +175,7 @@ export const capacitorPlatform: PlatformAPI = {
       }
     },
     getLibrary: async () => {
-      const { value } = await Preferences.get({ key: 'android_library.json' });
+      const value = localStorage.getItem('web_library.json');
       if (!value) return { songs: [], albums: [], artists: [] };
       try {
         return JSON.parse(value);
@@ -193,13 +192,13 @@ export const capacitorPlatform: PlatformAPI = {
   },
 
   app: {
-    getVersion: async () => '2.0.0-android',
+    getVersion: async () => '2.0.0-web',
   },
 
   updater: {
     isAvailable: false,
     check: () => {
-      console.log('[Capacitor] Auto update is disabled on Android');
+      console.log('[Web] Auto update is disabled on Web');
     },
   },
 

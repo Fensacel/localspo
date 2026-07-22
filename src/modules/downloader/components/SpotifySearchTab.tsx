@@ -16,6 +16,7 @@ import { useSpotifyStore } from '../stores/useSpotifyStore';
 import { useDownloaderStore } from '../stores/useDownloaderStore';
 import { useToastStore } from '@/stores/useToastStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useLibraryStore } from '@/stores/useLibraryStore';
 import type { SpotifySearchType, SpotifySearchTrack } from '../types';
 import { createStreamSong } from '@/types/music';
 
@@ -61,20 +62,21 @@ export function SpotifySearchTab() {
   };
 
   const handlePlay = (track: SpotifySearchTrack) => {
-    if (!track.ytVideoId) {
-      showToast('No YouTube Music video ID — cannot stream this track', 'error');
-      return;
-    }
+    const trackId = track.ytVideoId || track.id;
+    if (!trackId) return;
     const streamSong = createStreamSong({
-      id: `stream_${track.ytVideoId}`,
+      id: `stream_${trackId}`,
       title: track.title,
       artist: track.artist,
-      album: track.album,
-      duration: track.durationMs ? track.durationMs / 1000 : 0,
+      album: track.album || 'Single',
+      duration: track.durationMs ? track.durationMs / 1000 : 180,
       coverUrl: track.coverUrl || undefined,
-      ytVideoId: track.ytVideoId,
+      ytVideoId: track.ytVideoId || '',
     });
+    useLibraryStore.getState().addStreamSong(streamSong);
     setQueue([streamSong], 0, 'Search Results');
+    usePlayerStore.getState().setIsPlaying(true);
+    window.dispatchEvent(new CustomEvent('player:play'));
     showToast(`Streaming: ${track.artist} — ${track.title}`, 'info');
   };
 
@@ -217,7 +219,7 @@ export function SpotifySearchTab() {
                     album={track.album}
                     duration={formatDuration(track.durationMs)}
                     spotifyUrl={track.spotifyUrl}
-                    canStream={!!track.ytVideoId}
+                    canStream={true}
                     onPlay={() => handlePlay(track)}
                     onDownload={() => handleDownload(track.spotifyUrl, track.title)}
                   />
@@ -346,7 +348,10 @@ function TrackRow({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.03, 0.4) }}
-      className="flex items-center gap-4 px-4 py-3 bg-[#181818] hover:bg-[#232323] rounded-lg group transition-colors cursor-default"
+      onClick={() => {
+        if (canStream && onPlay) onPlay();
+      }}
+      className={`flex items-center gap-4 px-4 py-3 bg-[#181818] hover:bg-[#232323] rounded-lg group transition-colors ${canStream && onPlay ? 'cursor-pointer' : 'cursor-default'}`}
     >
       {/* Album art */}
       <div

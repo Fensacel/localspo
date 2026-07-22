@@ -10,7 +10,8 @@ import { getImageUrl } from '@/utils';
 import { createStreamSong } from '@/types/music';
 
 interface FeaturedTrack {
-  ytVideoId: string;
+  ytVideoId?: string;
+  id?: string;
   title: string;
   artist: string;
   album: string;
@@ -57,13 +58,14 @@ export function HomePage() {
 
         if (res && Array.isArray(res.tracks) && res.tracks.length > 0) {
           const validTracks: FeaturedTrack[] = res.tracks
-            .filter((t: any) => t.ytVideoId)
+            .filter((t: any) => t.ytVideoId || t.id)
             .map((t: any) => ({
               ytVideoId: t.ytVideoId,
+              id: t.id,
               title: t.title,
               artist: t.artist,
               album: t.album || 'Single',
-              coverUrl: t.coverUrl || `https://i.ytimg.com/vi/${t.ytVideoId}/hqdefault.jpg`,
+              coverUrl: t.coverUrl || (t.ytVideoId ? `https://i.ytimg.com/vi/${t.ytVideoId}/hqdefault.jpg` : '/default-cover.png'),
             }));
           setFeaturedTracks(validTracks.slice(0, 16));
         }
@@ -81,23 +83,24 @@ export function HomePage() {
   }, []);
 
   const handlePlayStreamTrack = (track: FeaturedTrack) => {
-    if (!track.ytVideoId) return;
+    const trackId = track.ytVideoId || track.id;
+    if (!trackId) return;
 
     const allStreamSongs = featuredTracks.map((t) => {
       const s = createStreamSong({
-        id: `stream_${t.ytVideoId}`,
+        id: `stream_${t.ytVideoId || t.id}`,
         title: t.title,
         artist: t.artist,
         album: t.album,
         duration: 180,
         coverUrl: t.coverUrl,
-        ytVideoId: t.ytVideoId,
+        ytVideoId: t.ytVideoId || '',
       });
       useLibraryStore.getState().addStreamSong(s);
       return s;
     });
 
-    const index = featuredTracks.findIndex((t) => t.ytVideoId === track.ytVideoId);
+    const index = featuredTracks.findIndex((t) => (t.ytVideoId || t.id) === trackId);
     setQueue(allStreamSongs, index >= 0 ? index : 0, 'Featured Streaming');
     usePlayerStore.getState().setIsPlaying(true);
     window.dispatchEvent(new CustomEvent('player:play'));
@@ -105,15 +108,16 @@ export function HomePage() {
 
   const handleAddToQueueStreamTrack = (track: FeaturedTrack, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!track.ytVideoId) return;
+    const trackId = track.ytVideoId || track.id;
+    if (!trackId) return;
     const streamSong = createStreamSong({
-      id: `stream_${track.ytVideoId}`,
+      id: `stream_${trackId}`,
       title: track.title,
       artist: track.artist,
       album: track.album,
       duration: 180,
       coverUrl: track.coverUrl,
-      ytVideoId: track.ytVideoId,
+      ytVideoId: track.ytVideoId || '',
     });
     useLibraryStore.getState().addStreamSong(streamSong);
     usePlayerStore.getState().addToQueue(streamSong);
@@ -152,15 +156,6 @@ export function HomePage() {
       icon: Clock,
       bg: 'from-blue-600 to-indigo-900',
       action: () => navigate('/history'),
-    },
-    {
-      title: 'Import Playlist',
-      subtitle: 'From Spotify',
-      cover: null,
-      icon: Plus,
-      bg: 'from-sky-500 to-indigo-600',
-      noPlay: true,
-      action: () => setShowImportModal(true),
     },
     ...playlists.map((p) => ({
       title: p.name,
@@ -287,18 +282,20 @@ export function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
               {featuredTracks.slice(0, 12).map((track) => (
                 <div
-                  key={track.ytVideoId}
+                  key={track.ytVideoId || track.id}
                   onClick={() => handlePlayStreamTrack(track)}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    const trackId = track.ytVideoId || track.id;
+                    if (!trackId) return;
                     const streamSong = createStreamSong({
-                      id: `stream_${track.ytVideoId}`,
+                      id: `stream_${trackId}`,
                       title: track.title,
                       artist: track.artist,
                       album: track.album,
                       duration: 180,
                       coverUrl: track.coverUrl,
-                      ytVideoId: track.ytVideoId,
+                      ytVideoId: track.ytVideoId || '',
                     });
                     setContextMenu({ song: streamSong, x: e.clientX, y: e.clientY });
                   }}
@@ -311,7 +308,11 @@ export function HomePage() {
                       alt=""
                       referrerPolicy="no-referrer"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://i.ytimg.com/vi/${track.ytVideoId}/hqdefault.jpg`;
+                        if (track.ytVideoId) {
+                          (e.target as HTMLImageElement).src = `https://i.ytimg.com/vi/${track.ytVideoId}/hqdefault.jpg`;
+                        } else {
+                          (e.target as HTMLImageElement).src = '/default-cover.png';
+                        }
                       }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
