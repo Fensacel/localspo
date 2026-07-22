@@ -11,7 +11,11 @@ export default defineConfig({
       {
         entry: 'electron/main.ts',
         onstart(args) {
-          args.startup();
+          if (process.env.VSCODE_DEBUG) {
+            console.log(/* Automated */ 'Via VS Code');
+          } else {
+            args.startup();
+          }
         },
         vite: {
           build: {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLibraryStore, usePlayerStore, useToastStore } from '@/stores';
+import { useLibraryStore, usePlayerStore, useToastStore, useStreamingStore } from '@/stores';
 import { useSpotifyStore } from '@/modules/downloader/stores/useSpotifyStore';
 import { useDownloaderStore } from '@/modules/downloader/stores/useDownloaderStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -81,6 +81,10 @@ export function SearchPage() {
     });
 
     const idx = onlineTracks.findIndex((t) => (t.ytVideoId || t.id) === trackId);
+    const selectedSong = allStreamSongs[idx >= 0 ? idx : 0];
+    if (selectedSong) {
+      useStreamingStore.getState().resolveStreamUrl(selectedSong, true).catch(() => {});
+    }
     setQueue(allStreamSongs, idx >= 0 ? idx : 0, 'Online Search Streaming');
     usePlayerStore.getState().setIsPlaying(true);
     window.dispatchEvent(new CustomEvent('player:play'));

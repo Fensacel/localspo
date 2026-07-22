@@ -86,6 +86,9 @@ export interface DownloadItem {
   // Playlist job linkage
   playlistJobId?: string;
 
+  // Track duration
+  durationMs?: number;
+
   // Extended ID3 Metadata
   releaseDate?: string;
   trackNumber?: number;
@@ -158,6 +161,7 @@ export class DownloaderService {
         addedAt: Date.now(),
         attempts: 0,
         playlistJobId: effectiveJobId,
+        durationMs: track.durationMs,
 
         releaseDate: track.releaseDate,
         trackNumber: track.trackNumber,
@@ -390,8 +394,8 @@ export class DownloaderService {
     const tempAudioFile = path.join(osTempDir, `dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}${ext}`);
 
     try {
-      // 1. Search YouTube audio target
-      let searchTarget = `ytsearch1:${item.artist} - ${item.title} official audio`;
+      // 1. Search YouTube audio target using scored YTMusicApi
+      let searchTarget = '';
 
       if (
         item.spotifyUrl.includes('youtube.com/') ||
@@ -401,9 +405,12 @@ export class DownloaderService {
         // Direct YouTube link pasted by user
         searchTarget = item.spotifyUrl;
       } else {
-        const ytResult = await YTMusicApi.searchVideo(item.artist, item.title, item.album);
+        const durationSec = item.durationMs ? Math.round(item.durationMs / 1000) : undefined;
+        const ytResult = await YTMusicApi.searchVideo(item.artist, item.title, item.album, durationSec);
         if (ytResult && ytResult.videoId) {
           searchTarget = `https://www.youtube.com/watch?v=${ytResult.videoId}`;
+        } else {
+          throw new Error(`No official streaming source found for "${item.artist} - ${item.title}".`);
         }
       }
 

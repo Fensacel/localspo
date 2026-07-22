@@ -22,6 +22,7 @@ interface LibraryState {
   getAlbumById: (id: string) => Album | undefined;
   getArtistById: (id: string) => Artist | undefined;
   addStreamSong: (song: Song) => void;
+  clearStreamSongsMap: () => void;
 
 
   getAlbumSongs: (albumId: string) => Song[];
@@ -115,6 +116,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       } catch {}
       return { streamSongsMap: updatedMap };
     });
+  },
+  clearStreamSongsMap: () => {
+    try {
+      localStorage.removeItem('localspo_stream_songs_map');
+    } catch {}
+    set({ streamSongsMap: {} });
   },
 
 

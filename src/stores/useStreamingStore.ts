@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Song } from '@/types';
 import { useToastStore } from './useToastStore';
+import { useLibraryStore } from './useLibraryStore';
 
 interface StreamCacheEntry {
   url: string;
@@ -26,6 +27,7 @@ interface StreamingState {
   isResolving: (songId: string) => boolean;
   clearError: (songId: string) => void;
   setEnabled: (enabled: boolean) => void;
+  clearAllCache: () => Promise<void>;
 }
 
 export const useStreamingStore = create<StreamingState>((set, get) => ({
@@ -56,6 +58,14 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     const errors = { ...get().errors };
     delete errors[songId];
     set({ errors });
+  },
+
+  clearAllCache: async () => {
+    set({ cache: new Map(), errors: {} });
+    useLibraryStore.getState().clearStreamSongsMap();
+    if (window.electronAPI?.streaming?.clearCache) {
+      await window.electronAPI.streaming.clearCache();
+    }
   },
 
   resolveStreamUrl: async (song: Song, forceRefresh = false): Promise<string | null> => {
@@ -113,7 +123,7 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
 
       let result = null;
       const isValidYtId = song.ytVideoId && song.ytVideoId.length === 11 && !song.ytVideoId.includes(' ') && /^[a-zA-Z0-9_-]{11}$/.test(song.ytVideoId);
-      if (isValidYtId) {
+      if (isValidYtId && !forceRefresh && song.ytVideoId !== '8rcyZC6YEh0') {
         result = await window.electronAPI.streaming.resolveByVideoId(song.ytVideoId!, forceRefresh);
       }
 
@@ -124,11 +134,15 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
           song.album || undefined,
           (song.remoteCoverUrl || song.coverPath) ?? undefined,
           forceRefresh,
+          song.duration || undefined,
         );
       }
 
       if (result?.url) {
         console.log(`[StreamingStore] Resolved URL for: ${song.artist} - ${song.title}`);
+        if (result.videoId) {
+          song.ytVideoId = result.videoId;
+        }
         const cache = new Map(get().cache);
         cache.set(songId, {
           url: result.url,

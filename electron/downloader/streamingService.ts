@@ -44,6 +44,7 @@ export class StreamingService {
     album?: string,
     coverUrl?: string,
     forceRefresh = false,
+    durationSeconds?: number,
   ): Promise<StreamUrlResult | null> {
     const cacheKey = this.makeCacheKey(title, artist);
 
@@ -69,21 +70,21 @@ export class StreamingService {
     this.resolvingIds.add(cacheKey);
     try {
       // 1. Search YouTube Music for the best matching video
-      console.log(`[Streaming] Searching YouTube Music for: ${artist} - ${title}`);
+      console.log(`[Streaming] Searching YouTube Music for: ${artist} - ${title} (Duration: ${durationSeconds || 'N/A'}s)`);
       let videoId: string | null = null;
-      let durationSec = 0;
+      let durationSec = durationSeconds || 0;
       let finalTitle = title;
       let finalArtist = artist;
 
-      const ytResult = await YTMusicApi.searchVideo(artist, title);
+      const ytResult = await YTMusicApi.searchVideo(artist, title, album, durationSeconds);
       if (ytResult?.videoId) {
         videoId = ytResult.videoId;
         finalTitle = ytResult.title || title;
         finalArtist = ytResult.artist || artist;
-        durationSec = ytResult.durationSeconds || 0;
+        durationSec = ytResult.durationSeconds || durationSeconds || 0;
       } else {
-        console.log(`[Streaming] YTMusicApi returned null. Falling back to yt-dlp search for: ${artist} - ${title}`);
-        videoId = await this.resolveVideoIdByYtDlpSearch(artist, title);
+        console.log(`[StreamingEngine] YTMusicApi returned null. Falling back to yt-dlp search for: ${artist} - ${title}`);
+        videoId = await this.resolveVideoIdByYtDlpSearch(artist, title, album, durationSeconds);
       }
 
       if (!videoId) {
@@ -91,14 +92,25 @@ export class StreamingService {
         return null;
       }
 
-      console.log(`[Streaming] Found videoId: ${videoId} for: ${artist} - ${title}`);
+      if (!videoId || videoId.length !== 11) {
+        throw new Error(`STREAM INTEGRITY ERROR: Invalid videoId resolved!`);
+      }
 
-      // 2. Resolve direct audio URL with yt-dlp
+      // 2. Resolve direct audio URL with yt-dlp using LOCKED videoId ONLY
       const url = await this.resolveVideoUrl(videoId);
       if (!url) {
         console.error(`[Streaming] yt-dlp failed to resolve URL for videoId: ${videoId}`);
         return null;
       }
+
+      console.log('====================================================');
+      console.log('[SINGLE SOURCE OF TRUTH VERIFICATION]');
+      console.log(`Selected Metadata    : "${artist} - ${title}"`);
+      console.log(`Selected videoId     : ${videoId}`);
+      console.log(`Locked Target URL    : https://www.youtube.com/watch?v=${videoId}`);
+      console.log(`yt-dlp Stream URL    : ${url.slice(0, 80)}...`);
+      console.log(`Final Playback ID    : ${videoId}`);
+      console.log('====================================================');
 
       const result: StreamUrlResult = {
         url,
@@ -188,6 +200,17 @@ export class StreamingService {
     return this.memoryCache.size;
   }
 
+  public clearAllCache(): void {
+    this.memoryCache.clear();
+    try {
+      const filePath = this.getCacheFilePath();
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch {}
+    console.log('[StreamingService] Cleared all memory and disk streaming cache.');
+  }
+
   // ─── yt-dlp URL Resolution ────────────────────────────────────────────────
 
   private resolveVideoUrl(videoId: string): Promise<string | null> {
@@ -249,20 +272,22 @@ export class StreamingService {
     });
   }
 
-  private resolveVideoIdByYtDlpSearch(artist: string, title: string): Promise<string | null> {
+  private resolveVideoIdByYtDlpSearch(artist: string, title: string, album?: string, durationSec?: number): Promise<string | null> {
     return new Promise((resolve) => {
       const { ytdlp } = getBinaryPaths(this.getDataPath);
-      const query = `ytsearch1:${artist} - ${title}`;
+      const query = `ytsearch10:${artist} ${title} official audio`;
 
       const args = [
         '--no-warnings',
         '--no-playlist',
         '--extractor-args',
         'youtube:player_client=android,mweb,web',
-        '--get-id',
+        '--flat-playlist',
+        '--print',
+        '%(id)s\t%(title)s\t%(channel)s\t%(duration)s',
         query,
       ];
-      console.log(`[Streaming] Running yt-dlp search for query: "${query}"`);
+      console.log(`[StreamingEngine] Query: "${artist} - ${title}" (Album: ${album || 'N/A'})`);
       const proc = spawn(ytdlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       let stdout = '';
@@ -272,26 +297,270 @@ export class StreamingService {
 
       const timeout = setTimeout(() => {
         proc.kill('SIGTERM');
-        console.error(`[Streaming] yt-dlp search timed out for: ${query}`);
+        console.error(`[StreamingEngine] yt-dlp search timed out for query: "${query}"`);
         resolve(null);
-      }, 15_000);
+      }, 14_000);
 
       proc.on('close', (code) => {
         clearTimeout(timeout);
-        const rawLine = stdout.split(/\r?\n/).map((s) => s.trim()).find((s) => s.length >= 8) || '';
-        const videoId = rawLine.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 11);
-        if (code === 0 && videoId && videoId.length === 11) {
-          console.log(`[Streaming] yt-dlp search found videoId: ${videoId} for: ${artist} - ${title}`);
-          resolve(videoId);
+        const lines = stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+
+        const normReqTitle = title.toLowerCase().trim();
+        const normReqArtist = artist.toLowerCase().split(',')[0].replace(/ feat\..*$/i, '').replace(/ ft\..*$/i, '').trim();
+        const normReqAlbum = (album || '').toLowerCase().trim();
+
+        const reqHasExtended = /\b(extended|10 minute|10 min|10-minute)\b/i.test(title);
+        const reqHasLive = /\b(live|concert)\b/i.test(title);
+        const reqHasRemix = /\b(remix)\b/i.test(title);
+
+        interface Candidate {
+          videoId: string;
+          title: string;
+          channel: string;
+          duration: number;
+          score: number;
+          reasons: string[];
+          rejectedReason?: string;
+        }
+
+        const candidates: Candidate[] = [];
+
+        for (const line of lines) {
+          const parts = line.split('\t');
+          const candId = parts[0]?.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 11);
+          const candTitle = parts[1] || '';
+          const candChannel = parts[2] || '';
+          const candDur = parseFloat(parts[3] || '0') || 0;
+
+          if (!candId || candId.length !== 11) continue;
+
+          const normCandTitle = candTitle.toLowerCase().trim();
+          const normCandChannel = candChannel.toLowerCase().trim();
+          const fullCandText = (normCandTitle + ' ' + normCandChannel).toLowerCase();
+
+          let score = 0;
+          const reasons: string[] = [];
+          let rejectedReason: string | undefined = undefined;
+
+          // 1. ARTIST IDENTITY VALIDATION GATE (STRICT FIRST CONSTRAINT)
+          const isGenericArtist = /\b(unknown artist|various artists|ai music|cover artist|fan upload|random channel|cover band|tribute band)\b/i.test(normCandChannel);
+          let artistScore = 0;
+          let isArtistValid = false;
+
+          if (normReqArtist) {
+            if (isGenericArtist) {
+              score -= 5000;
+              reasons.push('Generic/Unknown/Cover Artist Rejected (-5000)');
+              rejectedReason = `Rejected Generic Artist "${candChannel}"`;
+            } else if (normCandChannel === normReqArtist || normCandChannel.includes(normReqArtist) || normReqArtist.includes(normCandChannel) || fullCandText.includes(normReqArtist)) {
+              artistScore = 1000;
+              isArtistValid = true;
+              reasons.push('Artist EXACT Match (+1000)');
+            } else {
+              score -= 5000;
+              reasons.push('Artist Mismatch Penalty (-5000)');
+              rejectedReason = `Artist Mismatch ("${candChannel}" vs "${artist}")`;
+            }
+          }
+
+          if (!isArtistValid && normReqArtist) {
+            candidates.push({
+              videoId: candId,
+              title: candTitle,
+              channel: candChannel,
+              duration: candDur,
+              score: score - 5000,
+              reasons,
+              rejectedReason: rejectedReason || `Artist Mismatch ("${candChannel}" vs "${artist}")`,
+            });
+            continue;
+          }
+
+          score += artistScore;
+
+          // 2. NEGATIVE PENALTIES & HARD REJECTIONS
+          if (/\b(ai|ai cover|ai version|ai generated|ai voice|ai song)\b/i.test(fullCandText) && !/\bai\b/i.test(normReqTitle)) {
+            score -= 1000;
+            reasons.push('AI / AI Cover (-1000)');
+            rejectedReason = 'AI Cover / AI Generated detected';
+          }
+          if (/\bkaraoke\b/i.test(fullCandText) && !/\bkaraoke\b/i.test(normReqTitle)) {
+            score -= 1000;
+            reasons.push('Karaoke (-1000)');
+            rejectedReason = 'Karaoke version detected';
+          }
+          if (/\breaction\b/i.test(fullCandText) && !/\breaction\b/i.test(normReqTitle)) {
+            score -= 1000;
+            reasons.push('Reaction (-1000)');
+            rejectedReason = 'Reaction video detected';
+          }
+          if (/\bpodcast\b/i.test(fullCandText) && !/\bpodcast\b/i.test(normReqTitle)) {
+            score -= 1000;
+            reasons.push('Podcast (-1000)');
+            rejectedReason = 'Podcast detected';
+          }
+
+          if (/\b(instrumental|backing track|minus one|piano cover|guitar cover|violin cover|orchestral)\b/i.test(fullCandText) && !/\binstrumental\b/i.test(normReqTitle)) {
+            score -= 700;
+            reasons.push('Instrumental (-700)');
+          }
+          if (/\b(fanmade|fan-made|fan made)\b/i.test(fullCandText) && !/\bfanmade\b/i.test(normReqTitle)) {
+            score -= 700;
+            reasons.push('Fanmade (-700)');
+          }
+
+          if (/\bcover\b/i.test(fullCandText) && !/\bcover\b/i.test(normReqTitle)) {
+            score -= 500;
+            reasons.push('Cover (-500)');
+          }
+          if (/\bremix\b/i.test(fullCandText) && !reqHasRemix) {
+            score -= 500;
+            reasons.push('Remix (-500)');
+          }
+          if (/\b(sped up|speed up)\b/i.test(fullCandText) && !/\b(sped up|speed up)\b/i.test(normReqTitle)) {
+            score -= 500;
+            reasons.push('Sped Up (-500)');
+          }
+          if (/\b(slowed|reverb)\b/i.test(fullCandText) && !/\b(slowed|reverb)\b/i.test(normReqTitle)) {
+            score -= 500;
+            reasons.push('Slowed/Reverb (-500)');
+          }
+          if (/\bnightcore\b/i.test(fullCandText) && !/\bnightcore\b/i.test(normReqTitle)) {
+            score -= 500;
+            reasons.push('Nightcore (-500)');
+          }
+          if (/\b(8d|8d audio)\b/i.test(fullCandText) && !/\b8d\b/i.test(normReqTitle)) {
+            score -= 500;
+            reasons.push('8D Audio (-500)');
+          }
+          if (/\bbass boosted\b/i.test(fullCandText) && !/\bbass boosted\b/i.test(normReqTitle)) {
+            score -= 500;
+            reasons.push('Bass Boosted (-500)');
+          }
+
+          if (/\b(lyrics|lyric video)\b/i.test(fullCandText) && !/\blyrics\b/i.test(normReqTitle)) {
+            score -= 300;
+            reasons.push('Lyrics Video (-300)');
+          }
+          if (/\bextended\b/i.test(fullCandText) && !reqHasExtended) {
+            score -= 300;
+            reasons.push('Extended (-300)');
+          }
+          if (/\bloop\b/i.test(fullCandText) && !/\bloop\b/i.test(normReqTitle)) {
+            score -= 300;
+            reasons.push('Loop (-300)');
+          }
+
+          if (/\b(live|concert)\b/i.test(fullCandText) && !reqHasLive) {
+            score -= 200;
+            reasons.push('Live / Concert (-200)');
+          }
+
+          // 2. POSITIVE SCORING
+          if (normReqArtist) {
+            if (normCandChannel === normReqArtist || normCandChannel.includes(normReqArtist) || normReqArtist.includes(normCandChannel)) {
+              score += 500;
+              reasons.push('Artist EXACT Match (+500)');
+            } else {
+              score -= 1000;
+              reasons.push('Artist Mismatch Penalty (-1000)');
+              rejectedReason = `Artist Mismatch ("${candChannel}" vs "${artist}")`;
+            }
+          }
+
+          if (normCandTitle === normReqTitle || normCandTitle.includes(normReqTitle) || normReqTitle.includes(normCandTitle)) {
+            score += 300;
+            reasons.push('Title EXACT Match (+300)');
+          } else {
+            score -= 5000;
+            reasons.push('Title Mismatch Penalty (-5000)');
+            if (!rejectedReason) rejectedReason = `Title Mismatch ("${candTitle}" vs "${title}")`;
+          }
+
+          if (normReqAlbum && (normCandTitle.includes(normReqAlbum) || normCandChannel.includes(normReqAlbum))) {
+            score += 100;
+            reasons.push('Album Match (+100)');
+          }
+
+          if (normCandChannel.includes('official') || normCandChannel.includes('vevo')) {
+            score += 300;
+            reasons.push('Official Artist Channel (+300)');
+          } else if (normCandChannel.includes('topic') || normCandChannel.endsWith('- topic')) {
+            score += 250;
+            reasons.push('Official Topic Channel (+250)');
+          } else {
+            score += 150;
+            reasons.push('Verified Artist / Channel (+150)');
+          }
+
+          if (durationSec && durationSec > 0 && candDur > 0) {
+            const diff = Math.abs(candDur - durationSec);
+            if (diff <= 2) {
+              score += 100;
+              reasons.push(`Duration within 2s (${candDur}s vs ${durationSec}s) (+100)`);
+            } else if (diff <= 5) {
+              score += 50;
+              reasons.push(`Duration within 5s (${candDur}s vs ${durationSec}s) (+50)`);
+            } else if (diff > 10) {
+              score -= 1000;
+              reasons.push(`Duration Mismatch > 10s (${candDur}s vs ${durationSec}s, diff ${diff.toFixed(1)}s) (-1000)`);
+              if (!rejectedReason) rejectedReason = `Duration difference ${diff.toFixed(1)}s > 10s`;
+            }
+          }
+
+          candidates.push({
+            videoId: candId,
+            title: candTitle,
+            channel: candChannel,
+            duration: candDur,
+            score,
+            reasons,
+            rejectedReason,
+          });
+        }
+
+        candidates.sort((a, b) => b.score - a.score);
+
+        // DEBUG PANEL PRINTING
+        console.log('====================================================');
+        console.log('[YT-DLP FALLBACK SEARCH DEBUG PANEL]');
+        console.log(`Search Query     : "${query}"`);
+        console.log(`Requested Track  : "${artist} - ${title}" (Album: ${album || 'N/A'}, Duration: ${durationSec || 'N/A'}s)`);
+        console.log(`Total Candidates : ${candidates.length}`);
+        console.log('----------------------------------------------------');
+        for (let idx = 0; idx < candidates.length; idx++) {
+          const c = candidates[idx];
+          console.log(`Candidate #${idx + 1} [Score: ${c.score}]`);
+          console.log(`  ├─ VideoId         : ${c.videoId}`);
+          console.log(`  ├─ Matched Title   : "${c.title}"`);
+          console.log(`  ├─ Matched Artist  : "${c.channel}"`);
+          console.log(`  ├─ Duration        : ${c.duration}s`);
+          console.log(`  ├─ Score Breakdown : ${c.reasons.join(' | ')}`);
+          if (c.rejectedReason && c.score < 400) {
+            console.log(`  └─ Rejected Reason : ${c.rejectedReason}`);
+          }
+        }
+
+        const CONFIDENCE_THRESHOLD = 400;
+
+        if (candidates.length > 0 && candidates[0].score >= CONFIDENCE_THRESHOLD) {
+          const best = candidates[0];
+          console.log('----------------------------------------------------');
+          console.log(`[SELECTED RESULT] VideoId: ${best.videoId} ("${best.title}" by "${best.channel}") with Final Score: ${best.score}`);
+          console.log('====================================================');
+          resolve(best.videoId);
         } else {
-          console.warn(`[Streaming] yt-dlp search invalid videoId: "${videoId}" (raw: "${rawLine}")`);
+          console.log('----------------------------------------------------');
+          console.warn(`[YT-DLP FALLBACK] Highest score was ${candidates[0]?.score ?? 0} (< ${CONFIDENCE_THRESHOLD} threshold).`);
+          console.warn('RESULT: "No official version found."');
+          console.log('====================================================');
           resolve(null);
         }
       });
 
       proc.on('error', (err) => {
         clearTimeout(timeout);
-        console.error(`[Streaming] yt-dlp search spawn error:`, err);
+        console.error(`[StreamingEngine] yt-dlp search spawn error:`, err);
         resolve(null);
       });
     });
@@ -312,7 +581,22 @@ export class StreamingService {
       let loaded = 0;
       for (const [key, entry] of Object.entries(raw)) {
         const e = entry as CacheEntry;
-        if (e.result && e.result.expiresAt > now) {
+        const resTitle = (e.result?.title || '').toLowerCase();
+        const vid = (e.result?.videoId || '');
+
+        const isBadEntry =
+          vid === '8rcyZC6YEh0' ||
+          resTitle.includes('instrumental') ||
+          resTitle.includes('karaoke') ||
+          resTitle.includes('piano cover') ||
+          resTitle.includes('backing track') ||
+          resTitle.includes('ai cover') ||
+          resTitle.includes('ai generated') ||
+          resTitle.includes('ai voice') ||
+          resTitle.includes('fanmade') ||
+          /(\b|_|\()ai(\b|_|\))/i.test(resTitle);
+
+        if (e.result && e.result.expiresAt > now && !isBadEntry) {
           this.memoryCache.set(key, e);
           loaded++;
         }

@@ -129,7 +129,7 @@ export interface ElectronAPI {
   };
   // Streaming
   streaming: {
-    resolveUrl: (title: string, artist: string, album?: string, coverUrl?: string, forceRefresh?: boolean) => Promise<{
+    resolveUrl: (title: string, artist: string, album?: string, coverUrl?: string, forceRefresh?: boolean, durationSeconds?: number) => Promise<{
       url: string;
       videoId: string;
       expiresAt: number;
@@ -142,6 +142,7 @@ export interface ElectronAPI {
     resolveByVideoId: (videoId: string, forceRefresh?: boolean) => Promise<{ url: string; videoId: string; expiresAt: number } | null>;
     prefetch: (title: string, artist: string) => Promise<boolean>;
     pruneCache: () => Promise<{ cacheSize: number }>;
+    clearCache: () => Promise<{ cacheSize: number }>;
     cacheStats: () => Promise<{ size: number }>;
   };
   // OBS Overlay
@@ -280,14 +281,16 @@ const electronAPI: ElectronAPI = {
     },
   },
   streaming: {
-    resolveUrl: (title, artist, album, coverUrl, forceRefresh) =>
-      ipcRenderer.invoke('streaming:resolveUrl', title, artist, album, coverUrl, forceRefresh),
+    resolveUrl: (title, artist, album, coverUrl, forceRefresh, durationSeconds) =>
+      ipcRenderer.invoke('streaming:resolveUrl', title, artist, album, coverUrl, forceRefresh, durationSeconds),
     resolveByVideoId: (videoId, forceRefresh) =>
       ipcRenderer.invoke('streaming:resolveByVideoId', videoId, forceRefresh),
     prefetch: (title, artist) =>
       ipcRenderer.invoke('streaming:prefetch', title, artist),
     pruneCache: () =>
       ipcRenderer.invoke('streaming:pruneCache'),
+    clearCache: () =>
+      ipcRenderer.invoke('streaming:clearCache'),
     cacheStats: () =>
       ipcRenderer.invoke('streaming:cacheStats'),
   },

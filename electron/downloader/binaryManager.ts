@@ -1,6 +1,11 @@
 import path from 'path';
 import fs from 'fs';
-import { app } from 'electron';
+
+let app: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  app = require('electron').app;
+} catch {}
 
 export interface BinaryPaths {
   ytdlp: string;
@@ -13,8 +18,7 @@ export function getBinaryPaths(getDataPath: () => string): BinaryPaths {
   const ffmpegName = isWin ? 'ffmpeg.exe' : 'ffmpeg';
 
   const possibleYtdlpPaths = [
-    ...(process.resourcesPath ? [path.join(process.resourcesPath, 'bin', ytdlpName)] : []),
-    path.join(app.getAppPath(), 'bin', ytdlpName),
+    ...(app?.getAppPath ? [path.join(app.getAppPath(), 'bin', ytdlpName)] : []),
     path.join(process.cwd(), 'bin', ytdlpName),
     path.join(getDataPath(), 'bin', ytdlpName),
     ytdlpName,
@@ -22,7 +26,7 @@ export function getBinaryPaths(getDataPath: () => string): BinaryPaths {
 
   const possibleFfmpegPaths = [
     ...(process.resourcesPath ? [path.join(process.resourcesPath, 'bin', ffmpegName)] : []),
-    path.join(app.getAppPath(), 'bin', ffmpegName),
+    ...(app?.getAppPath ? [path.join(app.getAppPath(), 'bin', ffmpegName)] : []),
     path.join(process.cwd(), 'bin', ffmpegName),
     path.join(getDataPath(), 'bin', ffmpegName),
     ffmpegName,

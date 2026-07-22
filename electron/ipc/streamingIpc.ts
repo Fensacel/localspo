@@ -23,9 +23,10 @@ export function registerStreamingIpc(
       album?: string,
       coverUrl?: string,
       forceRefresh?: boolean,
+      durationSeconds?: number,
     ) => {
-      console.log(`[StreamingIpc] Resolving stream for: ${artist} - ${title} (forceRefresh: ${!!forceRefresh})`);
-      const result = await service.resolveBySearch(title, artist, album, coverUrl, forceRefresh);
+      console.log(`[StreamingIpc] Resolving stream for: ${artist} - ${title} (Duration: ${durationSeconds || 'N/A'}s, forceRefresh: ${!!forceRefresh})`);
+      const result = await service.resolveBySearch(title, artist, album, coverUrl, forceRefresh, durationSeconds);
       return result;
     },
   );
@@ -58,6 +59,11 @@ export function registerStreamingIpc(
   ipcMain.handle('streaming:pruneCache', async () => {
     service.pruneCache();
     return { cacheSize: service.getCacheSize() };
+  });
+
+  ipcMain.handle('streaming:clearCache', async () => {
+    service.clearAllCache();
+    return { cacheSize: 0 };
   });
 
   /**
