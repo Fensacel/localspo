@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
+import { OBSOverlaySection } from '@/components/OBSOverlaySection';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -250,6 +251,9 @@ export function SettingsPage() {
             )}
           </div>
         </SettingsSection>
+
+        {/* OBS Now Playing Overlay Section */}
+        <OBSOverlaySection />
 
         {/* Downloader Section */}
         <SettingsSection title="Spotify Downloader" icon={Download}>

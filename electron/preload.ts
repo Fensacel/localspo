@@ -144,6 +144,21 @@ export interface ElectronAPI {
     pruneCache: () => Promise<{ cacheSize: number }>;
     cacheStats: () => Promise<{ size: number }>;
   };
+  // OBS Overlay
+  obs: {
+    getStatus: () => Promise<{
+      running: boolean;
+      port: number;
+      lanAccess: boolean;
+      localUrl: string;
+      lanUrl: string | null;
+      config: any;
+    }>;
+    startServer: () => Promise<any>;
+    stopServer: () => Promise<any>;
+    updateConfig: (newConfig: any) => Promise<any>;
+    updateState: (payload: any, localCoverPath?: string | null, remoteCoverUrl?: string | null) => void;
+  };
 }
 
 const electronAPI: ElectronAPI = {
@@ -275,6 +290,14 @@ const electronAPI: ElectronAPI = {
       ipcRenderer.invoke('streaming:pruneCache'),
     cacheStats: () =>
       ipcRenderer.invoke('streaming:cacheStats'),
+  },
+  obs: {
+    getStatus: () => ipcRenderer.invoke('obs:getStatus'),
+    startServer: () => ipcRenderer.invoke('obs:start'),
+    stopServer: () => ipcRenderer.invoke('obs:stop'),
+    updateConfig: (newConfig) => ipcRenderer.invoke('obs:updateConfig', newConfig),
+    updateState: (payload, localCoverPath, remoteCoverUrl) =>
+      ipcRenderer.send('obs:updateState', payload, localCoverPath, remoteCoverUrl),
   },
 };
 

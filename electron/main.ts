@@ -437,6 +437,8 @@ function registerIpcHandlers(): void {
   });
 }
 
+import { registerOBSIpc } from './ipc/obsIpc';
+
 // ─── App Lifecycle ──────────────────────────────────────
 
 app.whenReady().then(() => {
@@ -447,6 +449,7 @@ app.whenReady().then(() => {
   const downloaderService = registerDownloaderIpc(getDataPath);
   registerPlaylistSyncIpc(getDataPath, downloaderService);
   registerStreamingIpc(getDataPath, () => mainWindow);
+  registerOBSIpc(getDataPath);
   setupAutoUpdater();
   createWindow();
 
