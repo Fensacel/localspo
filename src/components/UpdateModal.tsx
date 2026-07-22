@@ -29,7 +29,7 @@ export function UpdateModal() {
 
     const cleanup = window.electronAPI.updater.onStatus((data: UpdateData) => {
       console.log('[AutoUpdater] Received status:', data);
-      
+
       if (data.status === 'available' || data.status === 'downloading' || data.status === 'downloaded') {
         setUpdateInfo(data);
         if (data.version && data.version !== dismissedVersion) {
@@ -47,8 +47,8 @@ export function UpdateModal() {
       setUpdateInfo(
         customEvent.detail || {
           status: 'downloaded',
-          version: '2.0.1',
-          releaseName: 'v2.0.1 - Instant Online Stream Fix',
+          version: '2.0.2',
+          releaseName: 'v2.0.2 - Instant Online Stream Fix',
           releaseNotes: '• Fixed online search track instant playback\n• Added YouTube Music streaming auto-resolver\n• Improved desktop audio engine stability',
         },
       );

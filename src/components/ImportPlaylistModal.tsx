@@ -122,7 +122,7 @@ export function ImportPlaylistModal({ isOpen, onClose }: ImportPlaylistModalProp
           artist: t.artist || 'Unknown Artist',
           // Use real album name if available and not just the playlist title
           album: (t.album && t.album !== meta.title) ? t.album : (t.album || ''),
-          duration: t.durationMs ? Math.round(t.durationMs / 1000) : 180,
+          duration: t.durationMs ? Math.round(t.durationMs / 1000) : 0,
           coverUrl: trackCover,
           ytVideoId: t.spotifyId || t.id || undefined,
         });

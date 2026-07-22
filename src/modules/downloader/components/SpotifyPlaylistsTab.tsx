@@ -202,7 +202,7 @@ export function SpotifyPlaylistsTab() {
                                 title: t.title,
                                 artist: t.artist,
                                 album: t.album || playlist.name,
-                                duration: t.durationMs ? Math.round(t.durationMs / 1000) : 180,
+                                duration: t.durationMs ? Math.round(t.durationMs / 1000) : 0,
                                 coverUrl: t.coverUrl || playlist.coverUrl || undefined,
                                 ytVideoId: t.spotifyId || undefined,
                               })

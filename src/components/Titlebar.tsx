@@ -19,6 +19,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { platformService } from '@/platform';
 import { useSpotifyStore } from '@/modules/downloader/stores/useSpotifyStore';
 import { usePlayerStore, useLibraryStore } from '@/stores';
+import { SongContextMenu } from '@/components/SongContextMenu';
+import { createStreamSong } from '@/types/music';
 import type { Song } from '@/types';
 
 interface RecentSearchItem {
@@ -33,6 +35,7 @@ interface RecentSearchItem {
 export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
   const [recentSearches, setRecentSearches] = useState<RecentSearchItem[]>([]);
   
   const navigate = useNavigate();
@@ -324,6 +327,23 @@ export function Titlebar() {
                       {recentSearches.map((item) => (
                         <div
                           key={item.id}
+                          onContextMenu={(e) => {
+                            if (item.type !== 'song') return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const artistName = item.subtitle?.replace(/^Song • /, '') || 'Unknown';
+                            const songObj = createStreamSong({
+                              id: item.id.startsWith('stream_') ? item.id : `stream_${item.id}`,
+                              title: item.title,
+                              artist: artistName,
+                              album: '',
+                              duration: 0,
+                              coverUrl: item.coverUrl || undefined,
+                              ytVideoId: item.ytVideoId || '',
+                            });
+                            useLibraryStore.getState().addStreamSong(songObj);
+                            setContextMenu({ song: songObj, x: e.clientX, y: e.clientY });
+                          }}
                           onClick={() => {
                             usePlayerStore.setState({ showLyrics: false, showNowPlaying: false });
                             setIsDropdownOpen(false);
@@ -331,35 +351,15 @@ export function Titlebar() {
 
                             if (item.type === 'song') {
                               const artistName = item.subtitle?.replace(/^Song • /, '') || 'Unknown';
-                              const songObj: Song = {
+                              const songObj = createStreamSong({
                                 id: item.id.startsWith('stream_') ? item.id : `stream_${item.id}`,
                                 title: item.title,
                                 artist: artistName,
                                 album: '',
-                                duration: 180,
-                                coverPath: item.coverUrl || null,
-                                remoteCoverUrl: item.coverUrl || undefined,
-                                path: '',
-                                albumArtist: artistName,
-                                disc: 1,
-                                track: 1,
-                                year: 0,
-                                genre: '',
-                                codec: 'MP3',
-                                fileSize: 0,
-                                bitrate: 320,
-                                sampleRate: 44100,
-                                channels: 2,
-                                bitDepth: 16,
-                                addedAt: Date.now(),
-                                playCount: 0,
-                                hash: item.id,
-                                hasEmbeddedCover: false,
-                                hasEmbeddedLyrics: false,
-                                lrcPath: null,
-                                sourceType: 'streaming',
-                                ytVideoId: item.ytVideoId || undefined,
-                              };
+                                duration: 0,
+                                coverUrl: item.coverUrl || undefined,
+                                ytVideoId: item.ytVideoId || '',
+                              });
                               useLibraryStore.getState().addStreamSong(songObj);
                               setQueue([songObj], 0, 'Recent Search');
                               usePlayerStore.setState({ currentSong: songObj, isPlaying: true });
@@ -428,6 +428,24 @@ export function Titlebar() {
                       {searchResults.tracks.slice(0, 5).map((track: any) => (
                         <div
                           key={track.id || track.spotifyId}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const trackId = track.id || track.spotifyId || '';
+                            const cover = track.album?.images?.[0]?.url || track.coverUrl || undefined;
+                            const artistStr = track.artists?.map((a: any) => a.name).join(', ') || track.artist || 'Unknown';
+                            const songObj = createStreamSong({
+                              id: trackId.startsWith('stream_') ? trackId : `stream_${trackId}`,
+                              title: track.name || track.title,
+                              artist: artistStr,
+                              album: track.album?.name || track.album || '',
+                              duration: track.durationMs ? Math.round(track.durationMs / 1000) : (track.duration_ms ? Math.round(track.duration_ms / 1000) : 0),
+                              coverUrl: cover,
+                              ytVideoId: track.ytVideoId || '',
+                            });
+                            useLibraryStore.getState().addStreamSong(songObj);
+                            setContextMenu({ song: songObj, x: e.clientX, y: e.clientY });
+                          }}
                           onClick={() => {
                             const trackId = track.id || track.spotifyId || '';
                             const cover = track.album?.images?.[0]?.url || track.coverUrl || null;
@@ -439,38 +457,18 @@ export function Titlebar() {
                               subtitle: `Song • ${artistStr}`,
                               coverUrl: cover || undefined,
                               type: 'song',
-                              ytVideoId: track.ytVideoId || undefined,
+                              ytVideoId: track.ytVideoId || '',
                             });
 
-                            const songObj: Song = {
+                            const songObj = createStreamSong({
                               id: trackId.startsWith('stream_') ? trackId : `stream_${trackId}`,
                               title: track.name || track.title,
                               artist: artistStr,
                               album: track.album?.name || track.album || '',
-                              duration: Math.round((track.duration_ms || 180000) / 1000),
-                              coverPath: cover,
-                              remoteCoverUrl: cover || undefined,
-                              path: '',
-                              albumArtist: track.artists?.[0]?.name || track.artist || '',
-                              disc: 1,
-                              track: 1,
-                              year: 0,
-                              genre: '',
-                              codec: 'MP3',
-                              fileSize: 0,
-                              bitrate: 320,
-                              sampleRate: 44100,
-                              channels: 2,
-                              bitDepth: 16,
-                              addedAt: Date.now(),
-                              playCount: 0,
-                              hash: trackId,
-                              hasEmbeddedCover: false,
-                              hasEmbeddedLyrics: false,
-                              lrcPath: null,
-                              sourceType: 'streaming',
-                              ytVideoId: track.ytVideoId || undefined,
-                            };
+                              duration: track.durationMs ? Math.round(track.durationMs / 1000) : (track.duration_ms ? Math.round(track.duration_ms / 1000) : 0),
+                              coverUrl: cover || undefined,
+                              ytVideoId: track.ytVideoId || '',
+                            });
 
                             useLibraryStore.getState().addStreamSong(songObj);
                             setQueue([songObj], 0, 'Search Preview');
@@ -554,6 +552,15 @@ export function Titlebar() {
           <X size={14} strokeWidth={1.8} />
         </TitlebarButton>
       </div>
+
+      {contextMenu && (
+        <SongContextMenu
+          song={contextMenu.song}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

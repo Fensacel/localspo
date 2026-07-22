@@ -71,7 +71,7 @@ export function SearchPage() {
         title: t.title,
         artist: t.artist,
         album: t.album || 'Single',
-        duration: t.durationMs ? t.durationMs / 1000 : 180,
+        duration: t.durationMs ? t.durationMs / 1000 : 0,
         coverUrl: t.coverUrl || (t.ytVideoId ? `https://i.ytimg.com/vi/${t.ytVideoId}/hqdefault.jpg` : undefined),
         ytVideoId: t.ytVideoId || '',
       });
@@ -100,7 +100,7 @@ export function SearchPage() {
       title: track.title,
       artist: track.artist,
       album: track.album || 'Single',
-      duration: track.durationMs ? track.durationMs / 1000 : 180,
+      duration: track.durationMs ? track.durationMs / 1000 : 0,
       coverUrl: track.coverUrl || undefined,
       ytVideoId: track.ytVideoId || '',
     });
@@ -246,7 +246,7 @@ export function SearchPage() {
                             title: track.title,
                             artist: track.artist,
                             album: track.album || 'Single',
-                            duration: track.durationMs ? track.durationMs / 1000 : 180,
+                            duration: track.durationMs ? track.durationMs / 1000 : 0,
                             coverUrl: track.coverUrl || (track.ytVideoId ? `https://i.ytimg.com/vi/${track.ytVideoId}/hqdefault.jpg` : undefined),
                             ytVideoId: track.ytVideoId || '',
                           });

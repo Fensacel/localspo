@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePlaylistStore, useLibraryStore, usePlayerStore, useFavoritesStore } from '@/stores';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Trash2, Music, ListMusic, Heart, List, Check, Camera, X, ChevronLeft, RefreshCw } from 'lucide-react';
+import { Play, Pause, Trash2, Music, ListMusic, Heart, List, Check, Camera, X, ChevronLeft, RefreshCw, Shuffle } from 'lucide-react';
 import { formatTime, getImageUrl } from '@/utils';
 import { createStreamSong } from '@/types/music';
 import type { Song } from '@/types';
@@ -17,7 +17,7 @@ export function PlaylistDetailPage() {
   const [viewingDetailsSong, setViewingDetailsSong] = useState<Song | null>(null);
   const { playlists, removeSongFromPlaylist, deletePlaylist, updatePlaylist, addSongToPlaylist } = usePlaylistStore();
   const { getSongById } = useLibraryStore();
-  const { currentSong, isPlaying, setQueue, setIsPlaying } = usePlayerStore();
+  const { currentSong, isPlaying, setQueue, setIsPlaying, shuffleMode, toggleShuffle } = usePlayerStore();
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
 
   const [sortBy, setSortBy] = useState<'custom' | 'title' | 'artist' | 'album' | 'added' | 'duration'>('custom');
@@ -160,9 +160,25 @@ export function PlaylistDetailPage() {
     fetchRecommendations();
   }, [fetchRecommendations]);
 
+  const isPlaylistPlaying = useMemo(() => {
+    if (!isPlaying || !currentSong || songs.length === 0) return false;
+    return songs.some((s) => s.id === currentSong.id);
+  }, [isPlaying, currentSong, songs]);
+
   const handlePlayAll = useCallback(() => {
-    if (sortedSongs.length > 0 && playlist) setQueue(sortedSongs, 0, playlist.name);
-  }, [sortedSongs, playlist, setQueue]);
+    if (sortedSongs.length === 0 || !playlist) return;
+    if (isPlaylistPlaying) {
+      setIsPlaying(!isPlaying);
+      window.dispatchEvent(new CustomEvent('player:toggle'));
+    } else {
+      const startIndex = shuffleMode === 'on' ? Math.floor(Math.random() * sortedSongs.length) : 0;
+      setQueue(sortedSongs, startIndex, playlist.name);
+    }
+  }, [sortedSongs, playlist, isPlaylistPlaying, isPlaying, setIsPlaying, shuffleMode, setQueue]);
+
+  const handleShuffleToggle = useCallback(() => {
+    toggleShuffle();
+  }, [toggleShuffle]);
 
   const handlePlaySong = useCallback(
     (song: Song) => {
@@ -373,33 +389,61 @@ export function PlaylistDetailPage() {
               {songs.length} song{songs.length !== 1 ? 's' : ''} • {formatTime(totalDuration)}
             </p>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-5 mt-4">
+              {/* Big Spotify Green Circular Play/Pause Button */}
               {songs.length > 0 && (
                 <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.06 }}
+                  whileTap={{ scale: 0.94 }}
                   onClick={handlePlayAll}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
+                  className="w-14 h-14 bg-primary text-zinc-950 rounded-full flex items-center justify-center shadow-lg shadow-primary/25 hover:bg-primary-hover transition-all cursor-pointer shrink-0"
+                  title={isPlaylistPlaying ? 'Pause' : 'Play'}
                 >
-                  <Play size={16} fill="currentColor" />
-                  Play
+                  {isPlaylistPlaying ? (
+                    <Pause size={24} fill="currentColor" />
+                  ) : (
+                    <Play size={24} fill="currentColor" className="ml-1" />
+                  )}
                 </motion.button>
               )}
+
+              {/* Shuffle Icon Button */}
+              {songs.length > 0 && (
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleShuffleToggle}
+                  className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                    shuffleMode === 'on'
+                      ? 'text-primary hover:text-primary-hover'
+                      : 'text-text/50 hover:text-white'
+                  }`}
+                  title={shuffleMode === 'on' ? 'Disable shuffle' : 'Enable shuffle'}
+                >
+                  <Shuffle size={22} />
+                  {shuffleMode === 'on' && (
+                    <span className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-primary" />
+                  )}
+                </motion.button>
+              )}
+
+              {/* Delete Playlist Icon Button */}
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={handleDelete}
-                className="flex items-center gap-2 px-4 py-2.5 glass rounded-button text-sm font-semibold text-text/50 hover:text-danger transition-colors"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-text/40 hover:text-danger hover:bg-white/5 transition-all cursor-pointer"
+                title="Delete Playlist"
               >
-                <Trash2 size={16} />
-                Delete Playlist
+                <Trash2 size={20} />
               </motion.button>
 
+              {/* Sort dropdown */}
               {songs.length > 0 && (
-                <div className="relative" ref={dropdownRef}>
+                <div className="relative ml-auto" ref={dropdownRef}>
                   <button
                     onClick={() => setShowSortDropdown(!showSortDropdown)}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-button glass text-sm font-semibold hover:bg-white/5 transition-all text-text/50 hover:text-text select-none border border-white/5"
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl glass text-xs font-semibold hover:bg-white/10 transition-all text-text/60 hover:text-text select-none border border-white/5 cursor-pointer"
                   >
                     <span>{getSortLabel(sortBy)}</span>
                     <List size={14} />

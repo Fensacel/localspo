@@ -1,19 +1,29 @@
 import { useParams } from 'react-router-dom';
 import { useLibraryStore, usePlayerStore } from '@/stores';
 import { motion } from 'framer-motion';
-import { Play, Mic2, Disc3 } from 'lucide-react';
+import { Play, Mic2, Disc3, Shuffle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useMemo } from 'react';
 
 export function ArtistDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { getArtistById, getArtistAlbums, getArtistSongs } = useLibraryStore();
-  const { setQueue } = usePlayerStore();
+  const { setQueue, shuffleMode, toggleShuffle } = usePlayerStore();
   const navigate = useNavigate();
 
   const artist = id ? getArtistById(id) : undefined;
   const artistAlbums = useMemo(() => (id ? getArtistAlbums(id) : []), [id, getArtistAlbums]);
   const artistSongs = useMemo(() => (id ? getArtistSongs(id) : []), [id, getArtistSongs]);
+
+  const handlePlayAll = () => {
+    if (artistSongs.length === 0 || !artist) return;
+    const startIndex = shuffleMode === 'on' ? Math.floor(Math.random() * artistSongs.length) : 0;
+    setQueue(artistSongs, startIndex, artist.name);
+  };
+
+  const handleShuffleToggle = () => {
+    toggleShuffle();
+  };
 
   if (!artist) {
     return (
@@ -53,17 +63,38 @@ export function ArtistDetailPage() {
             song{artist.totalSongs !== 1 ? 's' : ''}
           </p>
 
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => {
-              if (artistSongs.length > 0) setQueue(artistSongs, 0, artist.name);
-            }}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
-          >
-            <Play size={16} fill="currentColor" />
-            Play All
-          </motion.button>
+          <div className="flex items-center gap-5 mt-4">
+            {artistSongs.length > 0 && (
+              <motion.button
+                whileHover={{ scale: 1.06 }}
+                whileTap={{ scale: 0.94 }}
+                onClick={handlePlayAll}
+                className="w-14 h-14 bg-primary text-zinc-950 rounded-full flex items-center justify-center shadow-lg shadow-primary/25 hover:bg-primary-hover transition-all cursor-pointer shrink-0"
+                title="Play All"
+              >
+                <Play size={24} fill="currentColor" className="ml-1" />
+              </motion.button>
+            )}
+
+            {artistSongs.length > 0 && (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={handleShuffleToggle}
+                className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                  shuffleMode === 'on'
+                    ? 'text-primary hover:text-primary-hover'
+                    : 'text-text/50 hover:text-white'
+                }`}
+                title={shuffleMode === 'on' ? 'Disable shuffle' : 'Enable shuffle'}
+              >
+                <Shuffle size={22} />
+                {shuffleMode === 'on' && (
+                  <span className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-primary" />
+                )}
+              </motion.button>
+            )}
+          </div>
         </div>
       </div>
 

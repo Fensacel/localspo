@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useLibraryStore, usePlayerStore, useFavoritesStore } from '@/stores';
 import { motion } from 'framer-motion';
-import { Play, Pause, Heart } from 'lucide-react';
+import { Play, Pause, Heart, Shuffle } from 'lucide-react';
 import { formatTime, isLossless } from '@/utils';
 import type { Song } from '@/types';
 import { useCallback, useMemo, useState } from 'react';
@@ -11,7 +11,7 @@ import { SongContextMenu } from '@/components/SongContextMenu';
 export function AlbumDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { getAlbumById, getAlbumSongs } = useLibraryStore();
-  const { currentSong, isPlaying, setQueue, setIsPlaying } = usePlayerStore();
+  const { currentSong, isPlaying, setQueue, setIsPlaying, shuffleMode, toggleShuffle } = usePlayerStore();
   const { isFavoriteSong, toggleFavoriteSong } = useFavoritesStore();
   const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
 
@@ -20,9 +20,25 @@ export function AlbumDetailPage() {
 
   const totalDuration = useMemo(() => songs.reduce((acc, s) => acc + s.duration, 0), [songs]);
 
+  const isAlbumPlaying = useMemo(() => {
+    if (!isPlaying || !currentSong || songs.length === 0) return false;
+    return songs.some((s) => s.id === currentSong.id);
+  }, [isPlaying, currentSong, songs]);
+
   const handlePlayAll = useCallback(() => {
-    if (songs.length > 0 && album) setQueue(songs, 0, album.name);
-  }, [songs, album, setQueue]);
+    if (songs.length === 0 || !album) return;
+    if (isAlbumPlaying) {
+      setIsPlaying(!isPlaying);
+      window.dispatchEvent(new CustomEvent('player:toggle'));
+    } else {
+      const startIndex = shuffleMode === 'on' ? Math.floor(Math.random() * songs.length) : 0;
+      setQueue(songs, startIndex, album.name);
+    }
+  }, [songs, album, isAlbumPlaying, isPlaying, setIsPlaying, shuffleMode, setQueue]);
+
+  const handleShuffleToggle = useCallback(() => {
+    toggleShuffle();
+  }, [toggleShuffle]);
 
   const handlePlaySong = useCallback(
     (song: Song) => {
@@ -86,15 +102,42 @@ export function AlbumDetailPage() {
               {formatTime(totalDuration)}
             </p>
 
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handlePlayAll}
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
-            >
-              <Play size={16} fill="currentColor" />
-              Play
-            </motion.button>
+            <div className="flex items-center gap-5 mt-4">
+              {songs.length > 0 && (
+                <motion.button
+                  whileHover={{ scale: 1.06 }}
+                  whileTap={{ scale: 0.94 }}
+                  onClick={handlePlayAll}
+                  className="w-14 h-14 bg-primary text-zinc-950 rounded-full flex items-center justify-center shadow-lg shadow-primary/25 hover:bg-primary-hover transition-all cursor-pointer shrink-0"
+                  title={isAlbumPlaying ? 'Pause' : 'Play'}
+                >
+                  {isAlbumPlaying ? (
+                    <Pause size={24} fill="currentColor" />
+                  ) : (
+                    <Play size={24} fill="currentColor" className="ml-1" />
+                  )}
+                </motion.button>
+              )}
+
+              {songs.length > 0 && (
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleShuffleToggle}
+                  className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                    shuffleMode === 'on'
+                      ? 'text-primary hover:text-primary-hover'
+                      : 'text-text/50 hover:text-white'
+                  }`}
+                  title={shuffleMode === 'on' ? 'Disable shuffle' : 'Enable shuffle & play'}
+                >
+                  <Shuffle size={22} />
+                  {shuffleMode === 'on' && (
+                    <span className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-primary" />
+                  )}
+                </motion.button>
+              )}
+            </div>
           </div>
         </div>
       </div>

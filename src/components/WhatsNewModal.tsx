@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Check, PartyPopper, X, Music2, ShieldCheck, Zap } from 'lucide-react';
+import { Sparkles, Check, PartyPopper, X, Music2, ShieldCheck, Radio } from 'lucide-react';
 
 // Current app release version
-const CURRENT_VERSION = '2.0.1';
+const CURRENT_VERSION = '2.0.2';
 
 export function WhatsNewModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -91,12 +91,12 @@ export function WhatsNewModal() {
 
             <div className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
               <div className="p-2 rounded-lg bg-sky-500/15 text-sky-400 shrink-0 mt-0.5">
-                <Zap size={16} />
+                <Radio size={16} />
               </div>
               <div>
-                <h4 className="text-xs font-bold text-white">Faster YouTube Stream Resolution</h4>
+                <h4 className="text-xs font-bold text-white">OBS Now Playing Overlay Server</h4>
                 <p className="text-[11px] text-text/50 mt-0.5 leading-snug">
-                  Peningkatan pencarian audio otomatis untuk lagu-lagu tanpa ID video bawaan agar diputar secara mulus.
+                  Server WebSocket lokal bawaan untuk menyediakan data judul lagu, artis, cover album, dan progress secara real-time ke OBS Studio.
                 </p>
               </div>
             </div>

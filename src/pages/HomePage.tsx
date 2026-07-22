@@ -155,6 +155,7 @@ export function HomePage() {
       cover: null,
       icon: Clock,
       bg: 'from-blue-600 to-indigo-900',
+      noPlay: true,
       action: () => navigate('/history'),
     },
     ...playlists.map((p) => ({

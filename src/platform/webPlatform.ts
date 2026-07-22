@@ -192,7 +192,7 @@ export const webPlatform: PlatformAPI = {
   },
 
   app: {
-    getVersion: async () => '2.0.1-web',
+    getVersion: async () => '2.0.2-web',
   },
 
   updater: {

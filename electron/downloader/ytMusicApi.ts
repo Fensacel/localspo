@@ -58,14 +58,22 @@ function computeDiceCoefficient(str1: string, str2: string): number {
 
 export class YTMusicApi {
   public static buildSearchQuery(artist: string, title: string, album?: string): string {
-    const cleanArtist = (artist || '').split(',')[0].replace(/\s*(?:feat\.|ft\.|x|&|and)\s*.*$/i, '').trim();
+    let cleanArtist = (artist || '').split(',')[0].split('&')[0].replace(/\s*(?:feat\.|ft\.|x|and)\s*.*$/i, '').trim();
+    cleanArtist = cleanArtist.replace(/^[\s\-_—–\.\,\;\"\'\“\”\‘\’\(\)\[\]]+/, '').replace(/[\s\-_—–\.\,\;\"\'\“\”\‘\’\(\)\[\]]+$/, '').trim();
+
     let cleanTitle = (title || '').trim();
+    cleanTitle = cleanTitle
+      .replace(/^[\s\-_—–\.\,\;\"\'\“\”\‘\’\(\)\[\]]+/, '')
+      .replace(/[\s\-_—–\.\,\;\"\'\“\”\‘\’\(\)\[\]]+$/, '')
+      .trim();
+
     if (cleanTitle.length > 40) {
       cleanTitle = cleanTitle
         .replace(/\s*[\(\[]\s*From The Vault\s*[\)\]]/gi, '')
         .replace(/\s*[\(\[]\s*Taylor's Version\s*[\)\]]/gi, '')
         .trim();
     }
+
     if (!cleanArtist) return cleanTitle;
     if (!cleanTitle) return cleanArtist;
     return `${cleanTitle} ${cleanArtist}`;
@@ -226,25 +234,42 @@ export class YTMusicApi {
           let isArtistValid = false;
           let artistSim = 0;
 
+          const reqArtists = (requestedArtist || '')
+            .split(/,|&|\bfeat\.\b|\bft\.\b|\bx\b|\band\b/i)
+            .map((a) => normalizeArtistStr(a))
+            .filter(Boolean);
+          const normPrimaryArtist = reqArtists[0] || normReqArtist;
+
           if (normReqArtist) {
             if (isGenericArtist) {
               score -= 5000;
               reasons.push('Generic/Unknown/Cover Artist Rejected (-5000)');
               rejectedReason = `Rejected Generic Artist "${candArtist}"`;
-            } else if (normCandArtist === normReqArtist || normCandArtist.includes(normReqArtist) || normReqArtist.includes(normCandArtist) || fullCandText.includes(normReqArtist)) {
+            } else if (
+              normCandArtist === normReqArtist ||
+              normCandArtist === normPrimaryArtist ||
+              normCandArtist.includes(normReqArtist) ||
+              normReqArtist.includes(normCandArtist) ||
+              normCandArtist.includes(normPrimaryArtist) ||
+              normPrimaryArtist.includes(normCandArtist) ||
+              fullCandText.includes(normReqArtist) ||
+              fullCandText.includes(normPrimaryArtist) ||
+              reqArtists.some((a) => normCandArtist.includes(a) || fullCandText.includes(a))
+            ) {
               artistScore = 1000;
               isArtistValid = true;
-              reasons.push('Artist EXACT Match (+1000)');
+              reasons.push('Artist EXACT / Primary Match (+1000)');
             } else {
-              artistSim = computeDiceCoefficient(normCandArtist, normReqArtist);
-              if (artistSim > 0.97) {
+              const primarySim = computeDiceCoefficient(normCandArtist, normPrimaryArtist);
+              artistSim = Math.max(computeDiceCoefficient(normCandArtist, normReqArtist), primarySim);
+              if (artistSim > 0.95) {
                 artistScore = 800;
                 isArtistValid = true;
-                reasons.push(`Artist Fuzzy Match >97% (${(artistSim * 100).toFixed(0)}%) (+800)`);
-              } else if (artistSim >= 0.75) {
-                artistScore = 400;
+                reasons.push(`Artist Fuzzy Match >95% (${(artistSim * 100).toFixed(0)}%) (+800)`);
+              } else if (artistSim >= 0.70) {
+                artistScore = 500;
                 isArtistValid = true;
-                reasons.push(`Artist Partial Match (${(artistSim * 100).toFixed(0)}%) (+400)`);
+                reasons.push(`Artist Partial Match (${(artistSim * 100).toFixed(0)}%) (+500)`);
               } else {
                 score -= 5000;
                 reasons.push('Artist Mismatch Penalty (-5000)');
@@ -412,19 +437,22 @@ export class YTMusicApi {
             reasons.push('Official Audio (+150)');
           }
 
-          // 3. DURATION VALIDATION (+100 <2s, +50 <5s, REJECT >10s)
+          // 3. DURATION VALIDATION
           if (requestedDurationSeconds && requestedDurationSeconds > 0 && candDur > 0) {
             const diff = Math.abs(candDur - requestedDurationSeconds);
-            if (diff <= 2) {
-              score += 100;
-              reasons.push(`Duration within 2s (${candDur}s vs ${requestedDurationSeconds}s) (+100)`);
-            } else if (diff <= 5) {
-              score += 50;
-              reasons.push(`Duration within 5s (${candDur}s vs ${requestedDurationSeconds}s) (+50)`);
-            } else if (diff > 10) {
-              score -= 1000;
-              reasons.push(`Duration Mismatch > 10s (${candDur}s vs ${requestedDurationSeconds}s, diff ${diff.toFixed(1)}s) (-1000)`);
-              if (!rejectedReason) rejectedReason = `Duration difference ${diff.toFixed(1)}s > 10s`;
+            if (diff <= 3) {
+              score += 120;
+              reasons.push(`Duration within 3s (${candDur}s vs ${requestedDurationSeconds}s) (+120)`);
+            } else if (diff <= 10) {
+              score += 60;
+              reasons.push(`Duration within 10s (${candDur}s vs ${requestedDurationSeconds}s) (+60)`);
+            } else if (diff <= 30) {
+              score -= 50;
+              reasons.push(`Duration diff 10-30s (${candDur}s vs ${requestedDurationSeconds}s) (-50)`);
+            } else if (diff > 90) {
+              score -= 600;
+              reasons.push(`Duration Mismatch > 90s (${candDur}s vs ${requestedDurationSeconds}s, diff ${diff.toFixed(1)}s) (-600)`);
+              if (!rejectedReason) rejectedReason = `Duration difference ${diff.toFixed(1)}s > 90s`;
             }
           }
 

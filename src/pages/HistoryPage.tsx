@@ -1,5 +1,5 @@
-import { useHistoryStore, useLibraryStore, usePlayerStore } from '@/stores';
-import { Clock, Play, Music, BarChart2, Award } from 'lucide-react';
+import { useHistoryStore, useLibraryStore, usePlayerStore, useToastStore } from '@/stores';
+import { Clock, Music, BarChart2, Award, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatTime, getImageUrl } from '@/utils';
 import type { Song } from '@/types';
@@ -10,7 +10,7 @@ type Tab = 'recent' | 'stats';
 type Period = 'day' | 'week' | 'month';
 
 export function HistoryPage() {
-  const { entries, removeFromHistory } = useHistoryStore();
+  const { entries, removeFromHistory, clearHistory } = useHistoryStore();
   const { getSongById } = useLibraryStore();
   const { setQueue, currentSong } = usePlayerStore();
   const [activeTab, setActiveTab] = useState<Tab>('recent');
@@ -29,12 +29,18 @@ export function HistoryPage() {
 
   // Compute most played stats
   const statsSongs = useMemo(() => {
-    const now = Date.now();
-    let periodMs = 7 * 24 * 60 * 60 * 1000; // default week
-    if (activePeriod === 'day') periodMs = 24 * 60 * 60 * 1000;
-    if (activePeriod === 'month') periodMs = 30 * 24 * 60 * 60 * 1000;
+    const now = new Date();
+    let startTime = 0;
+    if (activePeriod === 'day') {
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      startTime = today.getTime();
+    } else if (activePeriod === 'week') {
+      startTime = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    } else if (activePeriod === 'month') {
+      startTime = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    }
 
-    const filtered = entries.filter((e) => now - e.playedAt <= periodMs);
+    const filtered = entries.filter((e) => e.playedAt >= startTime);
 
     const map = new Map<string, { song: Song; count: number }>();
     for (const entry of filtered) {
@@ -88,6 +94,19 @@ export function HistoryPage() {
             Track and analyze your favorite tracks
           </p>
         </div>
+        {entries.length > 0 && (
+          <button
+            onClick={async () => {
+              await clearHistory();
+              useToastStore.getState().showToast('Listening history reset', 'info');
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl glass border border-white/5 text-xs font-semibold text-text/50 hover:text-danger hover:bg-white/5 transition-all cursor-pointer"
+            title="Reset listening history data"
+          >
+            <Trash2 size={14} />
+            Reset Data
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -132,6 +151,7 @@ export function HistoryPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.02 }}
+                  onClick={() => handlePlaySong(song)}
                   onDoubleClick={() => handlePlaySong(song)}
                   onContextMenu={(event) => {
                     event.preventDefault();
@@ -156,12 +176,6 @@ export function HistoryPage() {
                         <Music size={16} className="text-text/30" />
                       </div>
                     )}
-                    <button
-                      onClick={() => handlePlaySong(song)}
-                      className="absolute inset-0 bg-black/40 items-center justify-center hidden group-hover:flex text-white transition-opacity"
-                    >
-                      <Play size={16} fill="white" />
-                    </button>
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -228,6 +242,7 @@ export function HistoryPage() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.02 }}
+                    onClick={() => handlePlayStatsSong(song)}
                     onDoubleClick={() => handlePlayStatsSong(song)}
                     onContextMenu={(event) => {
                       event.preventDefault();
@@ -265,12 +280,6 @@ export function HistoryPage() {
                           <Music size={16} className="text-text/30" />
                         </div>
                       )}
-                      <button
-                        onClick={() => handlePlayStatsSong(song)}
-                        className="absolute inset-0 bg-black/40 items-center justify-center hidden group-hover:flex text-white transition-opacity"
-                      >
-                        <Play size={16} fill="white" />
-                      </button>
                     </div>
 
                     <div className="min-w-0 flex-1">

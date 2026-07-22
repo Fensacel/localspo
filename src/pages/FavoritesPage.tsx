@@ -1,21 +1,41 @@
 import { useFavoritesStore, useLibraryStore, usePlayerStore } from '@/stores';
-import { Heart, Play, Music } from 'lucide-react';
+import { Heart, Play, Pause, Music, Shuffle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatTime } from '@/utils';
 import type { Song } from '@/types';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { SongContextMenu } from '@/components/SongContextMenu';
 
 export function FavoritesPage() {
   const { songIds, toggleFavoriteSong } = useFavoritesStore();
   const { getSongById } = useLibraryStore();
-  const { setQueue, currentSong, isPlaying } = usePlayerStore();
+  const { setQueue, currentSong, isPlaying, setIsPlaying, shuffleMode, toggleShuffle } = usePlayerStore();
   const [contextMenu, setContextMenu] = useState<{ song: Song; x: number; y: number } | null>(null);
 
   // Map favorite song IDs to actual song objects
   const favoriteSongs = songIds
     .map((id) => getSongById(id))
     .filter((song): song is Song => song !== undefined);
+
+  const isFavsPlaying = useMemo(() => {
+    if (!isPlaying || !currentSong || favoriteSongs.length === 0) return false;
+    return favoriteSongs.some((s) => s.id === currentSong.id);
+  }, [isPlaying, currentSong, favoriteSongs]);
+
+  const handlePlayAll = () => {
+    if (favoriteSongs.length === 0) return;
+    if (isFavsPlaying) {
+      setIsPlaying(!isPlaying);
+      window.dispatchEvent(new CustomEvent('player:toggle'));
+    } else {
+      const startIndex = shuffleMode === 'on' ? Math.floor(Math.random() * favoriteSongs.length) : 0;
+      setQueue(favoriteSongs, startIndex, 'Favorites');
+    }
+  };
+
+  const handleShuffleToggle = () => {
+    toggleShuffle();
+  };
 
   const handlePlaySong = (song: Song) => {
     const index = favoriteSongs.findIndex((s) => s.id === song.id);
@@ -35,15 +55,38 @@ export function FavoritesPage() {
           </p>
         </div>
         {favoriteSongs.length > 0 && (
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setQueue(favoriteSongs, 0, 'Favorites')}
-            className="flex items-center gap-2 px-5 py-2.5 bg-primary rounded-button text-sm font-semibold text-zinc-950 shadow-glow hover:bg-primary-hover transition-colors"
-          >
-            <Play size={16} fill="currentColor" />
-            Play Favorites
-          </motion.button>
+          <div className="flex items-center gap-4">
+            <motion.button
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.94 }}
+              onClick={handlePlayAll}
+              className="w-14 h-14 bg-primary text-zinc-950 rounded-full flex items-center justify-center shadow-lg shadow-primary/25 hover:bg-primary-hover transition-all cursor-pointer shrink-0"
+              title={isFavsPlaying ? 'Pause' : 'Play Favorites'}
+            >
+              {isFavsPlaying ? (
+                <Pause size={24} fill="currentColor" />
+              ) : (
+                <Play size={24} fill="currentColor" className="ml-1" />
+              )}
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={handleShuffleToggle}
+              className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                shuffleMode === 'on'
+                  ? 'text-primary hover:text-primary-hover'
+                  : 'text-text/50 hover:text-white'
+              }`}
+              title={shuffleMode === 'on' ? 'Disable shuffle' : 'Enable shuffle'}
+            >
+              <Shuffle size={22} />
+              {shuffleMode === 'on' && (
+                <span className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-primary" />
+              )}
+            </motion.button>
+          </div>
         )}
       </div>
 

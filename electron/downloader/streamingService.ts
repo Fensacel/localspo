@@ -213,63 +213,78 @@ export class StreamingService {
 
   // ─── yt-dlp URL Resolution ────────────────────────────────────────────────
 
-  private resolveVideoUrl(videoId: string): Promise<string | null> {
-    return new Promise((resolve) => {
-      const { ytdlp } = getBinaryPaths(this.getDataPath);
-      const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  private async resolveVideoUrl(videoId: string): Promise<string | null> {
+    const runYtDlp = (args: string[]): Promise<string | null> => {
+      return new Promise((resolve) => {
+        const { ytdlp } = getBinaryPaths(this.getDataPath);
+        const proc = spawn(ytdlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stdout = '';
+        let stderr = '';
 
-      const args = [
-        '--no-warnings',
-        '--no-playlist',
-        '--extractor-args',
-        'youtube:player_client=android,mweb,web',
-        '-f',
-        'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/ba/b',
-        '--get-url',
-        videoUrl,
-      ];
+        proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+        proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
 
-      console.log(`[Streaming] Running yt-dlp --get-url for videoId: ${videoId}`);
-
-      const proc = spawn(ytdlp, args, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      proc.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-
-      proc.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-
-      const timeout = setTimeout(() => {
-        proc.kill('SIGTERM');
-        console.error(`[Streaming] yt-dlp timed out for videoId: ${videoId}`);
-        resolve(null);
-      }, 30_000);
-
-      proc.on('close', (code) => {
-        clearTimeout(timeout);
-        const url = stdout.split(/\r?\n/).map((s) => s.trim()).find((s) => s.startsWith('http')) || '';
-        if (code === 0 && url) {
-          console.log(`[Streaming] Resolved URL (${url.slice(0, 80)}...) for videoId: ${videoId}`);
-          resolve(url);
-        } else {
-          console.error(`[Streaming] yt-dlp exited with code ${code} for videoId: ${videoId}. stderr: ${stderr.slice(0, 300)}`);
+        const timeout = setTimeout(() => {
+          proc.kill('SIGTERM');
           resolve(null);
-        }
-      });
+        }, 20_000);
 
-      proc.on('error', (err) => {
-        clearTimeout(timeout);
-        console.error(`[Streaming] yt-dlp spawn error for videoId: ${videoId}`, err);
-        resolve(null);
+        proc.on('close', (code) => {
+          clearTimeout(timeout);
+          const url = stdout.split(/\r?\n/).map((s) => s.trim()).find((s) => s.startsWith('http')) || '';
+          if (code === 0 && url) {
+            resolve(url);
+          } else {
+            console.warn(`[Streaming] yt-dlp attempt failed (code ${code}). stderr: ${stderr.slice(0, 200)}`);
+            resolve(null);
+          }
+        });
+
+        proc.on('error', () => {
+          clearTimeout(timeout);
+          resolve(null);
+        });
       });
-    });
+    };
+
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    console.log(`[Streaming] Running yt-dlp --get-url for videoId: ${videoId}`);
+
+    // Primary attempt
+    const primaryArgs = [
+      '--no-warnings',
+      '--no-playlist',
+      '--extractor-args',
+      'youtube:player_client=android,mweb,web',
+      '-f',
+      'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/ba/b',
+      '--get-url',
+      videoUrl,
+    ];
+
+    let url = await runYtDlp(primaryArgs);
+    if (url) {
+      console.log(`[Streaming] Resolved URL (${url.slice(0, 80)}...) for videoId: ${videoId}`);
+      return url;
+    }
+
+    // Fallback attempt without restrictive extractor args
+    console.warn(`[Streaming] Primary yt-dlp attempt failed for ${videoId}. Retrying with fallback args...`);
+    const fallbackArgs = [
+      '--no-warnings',
+      '--no-playlist',
+      '-f',
+      'bestaudio/ba/b',
+      '--get-url',
+      videoUrl,
+    ];
+    url = await runYtDlp(fallbackArgs);
+    if (url) {
+      console.log(`[Streaming] Fallback resolved URL (${url.slice(0, 80)}...) for videoId: ${videoId}`);
+      return url;
+    }
+
+    return null;
   }
 
   private resolveVideoIdByYtDlpSearch(artist: string, title: string, album?: string, durationSec?: number): Promise<string | null> {
@@ -347,19 +362,30 @@ export class StreamingService {
           let artistScore = 0;
           let isArtistValid = false;
 
+          const normPrimaryArtist = artist.toLowerCase().split(/,|&|\bfeat\.\b|\bft\.\b|\bx\b|\band\b/i)[0].replace(/[^\w\s]/g, '').trim();
+
           if (normReqArtist) {
             if (isGenericArtist) {
               score -= 5000;
               reasons.push('Generic/Unknown/Cover Artist Rejected (-5000)');
               rejectedReason = `Rejected Generic Artist "${candChannel}"`;
-            } else if (normCandChannel === normReqArtist || normCandChannel.includes(normReqArtist) || normReqArtist.includes(normCandChannel) || fullCandText.includes(normReqArtist)) {
+            } else if (
+              normCandChannel === normReqArtist ||
+              normCandChannel === normPrimaryArtist ||
+              normCandChannel.includes(normReqArtist) ||
+              normReqArtist.includes(normCandChannel) ||
+              normCandChannel.includes(normPrimaryArtist) ||
+              normPrimaryArtist.includes(normCandChannel) ||
+              fullCandText.includes(normReqArtist) ||
+              fullCandText.includes(normPrimaryArtist)
+            ) {
               artistScore = 1000;
               isArtistValid = true;
-              reasons.push('Artist EXACT Match (+1000)');
+              reasons.push('Artist EXACT / Primary Match (+1000)');
             } else {
-              score -= 5000;
-              reasons.push('Artist Mismatch Penalty (-5000)');
-              rejectedReason = `Artist Mismatch ("${candChannel}" vs "${artist}")`;
+              artistScore = 400;
+              isArtistValid = true;
+              reasons.push('Artist Partial Match (+400)');
             }
           }
 
@@ -495,16 +521,19 @@ export class StreamingService {
 
           if (durationSec && durationSec > 0 && candDur > 0) {
             const diff = Math.abs(candDur - durationSec);
-            if (diff <= 2) {
-              score += 100;
-              reasons.push(`Duration within 2s (${candDur}s vs ${durationSec}s) (+100)`);
-            } else if (diff <= 5) {
-              score += 50;
-              reasons.push(`Duration within 5s (${candDur}s vs ${durationSec}s) (+50)`);
-            } else if (diff > 10) {
-              score -= 1000;
-              reasons.push(`Duration Mismatch > 10s (${candDur}s vs ${durationSec}s, diff ${diff.toFixed(1)}s) (-1000)`);
-              if (!rejectedReason) rejectedReason = `Duration difference ${diff.toFixed(1)}s > 10s`;
+            if (diff <= 3) {
+              score += 120;
+              reasons.push(`Duration within 3s (${candDur}s vs ${durationSec}s) (+120)`);
+            } else if (diff <= 10) {
+              score += 60;
+              reasons.push(`Duration within 10s (${candDur}s vs ${durationSec}s) (+60)`);
+            } else if (diff <= 30) {
+              score -= 50;
+              reasons.push(`Duration diff 10-30s (${candDur}s vs ${durationSec}s) (-50)`);
+            } else if (diff > 90) {
+              score -= 600;
+              reasons.push(`Duration Mismatch > 90s (${candDur}s vs ${durationSec}s, diff ${diff.toFixed(1)}s) (-600)`);
+              if (!rejectedReason) rejectedReason = `Duration difference ${diff.toFixed(1)}s > 90s`;
             }
           }
 

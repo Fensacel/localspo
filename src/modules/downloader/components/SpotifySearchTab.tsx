@@ -69,7 +69,7 @@ export function SpotifySearchTab() {
       title: track.title,
       artist: track.artist,
       album: track.album || 'Single',
-      duration: track.durationMs ? track.durationMs / 1000 : 180,
+      duration: track.durationMs ? track.durationMs / 1000 : 0,
       coverUrl: track.coverUrl || undefined,
       ytVideoId: track.ytVideoId || '',
     });
