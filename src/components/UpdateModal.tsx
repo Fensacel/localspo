@@ -34,7 +34,7 @@ export function UpdateModal() {
   useEffect(() => {
     const handleTestEvent = (e: Event) => {
       const customEvent = e as CustomEvent;
-      setUpdateInfo(customEvent.detail || { status: 'downloaded', version: '1.0.5' });
+      setUpdateInfo(customEvent.detail || { status: 'downloaded', version: '2.0.0' });
       setIsOpen(true);
     };
 

@@ -2,11 +2,9 @@ node_modules/
 dist/
 dist-electron/
 release/
-*.log
-.env
-.DS_Store
-Thumbs.db
-
+release_dist/
+release-dist/
+release*/
 # Ignore semua Markdown
 *.md
 

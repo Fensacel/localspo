@@ -193,7 +193,7 @@ export const capacitorPlatform: PlatformAPI = {
   },
 
   app: {
-    getVersion: async () => '1.0.5-android',
+    getVersion: async () => '2.0.0-android',
   },
 
   updater: {

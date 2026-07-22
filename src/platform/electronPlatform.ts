@@ -26,7 +26,7 @@ export const electronPlatform: PlatformAPI = {
   },
 
   app: {
-    getVersion: () => window.electronAPI?.app?.getVersion?.() ?? Promise.resolve('1.0.5'),
+    getVersion: () => window.electronAPI?.app?.getVersion?.() ?? Promise.resolve('2.0.0'),
   },
 
   updater: {
